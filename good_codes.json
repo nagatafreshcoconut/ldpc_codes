@@ -1,0 +1,25 @@
+{
+    "code_1": {
+        "l": 8,
+        "m": 8,
+        "a_coeffs": [3, 1, 2, 6],
+        "b_coeffs": [3, 1, 2, 6],
+        "A_polynomials": "(x^{a_1} + y^{a_2} + y^{a_3} + y^{a_4}) mod 2",
+        "B_polynomials": "(y^{b_1} + x^{b_2} + x^{b_3} + x^{b_4}) mod 2",
+        "n": 128,
+        "k": 12,
+        "d": 8
+    },
+    "code_2": {
+        "l": 8,
+        "m": 8,
+        "a_coeffs": [3, 3, 2, 6],
+        "b_coeffs": [3, 3, 2, 6],
+        "A_polynomials": "(x^{a_1} + y^{a_2} + y^{a_3} + y^{a_4}) mod 2",
+        "B_polynomials": "(y^{b_1} + x^{b_2} + x^{b_3} + x^{b_4}) mod 2",
+        "n": 128,
+        "k": 16,
+        "d": 8
+    }
+}
+
