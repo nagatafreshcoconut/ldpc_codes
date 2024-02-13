@@ -14,7 +14,7 @@ def get_net_encoding_rate(k, n):
     return k / (2*n)
 
 def process_combination(args):
-    ell, m, fixed_x_index_a, fixed_y_index_b, num_summands_a, num_summands_b = args
+    ell, m, fixed_x_exponent_a, fixed_y_exponent_b, num_summands_a, num_summands_b = args
     good_configs = []
     I_ell = np.identity(ell, dtype=int)
     I_m = np.identity(m, dtype=int)
@@ -24,17 +24,17 @@ def process_combination(args):
     for j in range(m):
         y[j] = np.kron(I_ell, np.roll(I_m, j, axis=1))
 
-    x_indices = [i for i in range(ell) if i != fixed_x_index_a]
-    y_indices = [j for j in range(m) if j != fixed_y_index_b]
+    x_exponent = [i for i in range(ell) if i != fixed_x_exponent_a]
+    y_exponent = [j for j in range(m) if j != fixed_y_exponent_b]
 
-    for combo_a in itertools.combinations(y_indices, num_summands_a - 1):
-        for combo_b in itertools.combinations(x_indices, num_summands_b - 1):
-            A = x[fixed_x_index_a]
+    for combo_a in itertools.combinations(y_exponent, num_summands_a - 1):
+        for combo_b in itertools.combinations(x_exponent, num_summands_b - 1):
+            A = x[fixed_x_exponent_a]
             for idx in combo_a:
                 A += y[idx]
             A %= 2
 
-            B = y[fixed_y_index_b]
+            B = y[fixed_y_exponent_b]
             for idx in combo_b:
                 B += x[idx]
             B %= 2
@@ -42,8 +42,8 @@ def process_combination(args):
             # Placeholder for additional processing, like constructing and testing qcodes
 
             # Construct polynomial sum strings for A and B
-            A_poly_sum = f"x{fixed_x_index_a}" + " + " + " + ".join(f"y{idx}" for idx in combo_a)
-            B_poly_sum = f"y{fixed_y_index_b}" + " + " + " + ".join(f"x{idx}" for idx in combo_b)
+            A_poly_sum = f"x{fixed_x_exponent_a}" + " + " + " + ".join(f"y{idx}" for idx in combo_a)
+            B_poly_sum = f"y{fixed_y_exponent_b}" + " + " + " + ".join(f"x{idx}" for idx in combo_b)
 
             AT = np.transpose(A)
             BT = np.transpose(B)
