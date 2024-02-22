@@ -2,10 +2,10 @@ from typing import List, Dict, Optional
 
 import sys
 import io
+import time
 import numpy as np
 import pickle
 from itertools import product
-import copy
 
 from mip import Model, xsum, minimize, BINARY
 from bposd.css import css_code
@@ -125,10 +125,10 @@ def search_codes_general(
                                         code_config = {
                                             'l': l,
                                             'm': m,
-                                            'n_phys_qubits': qcode.N,
-                                            'n_log_qubits': qcode.K,
-                                            'lz': qcode.lz,
+                                            'num_phys_qubits': qcode.N,
+                                            'num_log_qubits': qcode.K,
                                             'lx': qcode.lx,
+                                            'hx': hx,
                                             'k': qcode.lz.shape[0], 
                                             'encoding_rate': r,
                                             'A_poly_sum': A_poly_sum,
@@ -137,7 +137,7 @@ def search_codes_general(
                                         good_configs.append(code_config)
 
         except Exception as e:
-            logging.warning('An error happened in the parameter space search.', e)
+            logging.warning('An error happened in the parameter space search: {}'.format(e))
             continue
         
     return good_configs
@@ -204,35 +204,36 @@ def calculate_code_distance(
 
         return int(opt_val)
     
-    distance = code_config.get('n')
+
+    distance = code_config.get('num_phys_qubits')
     hx = code_config.get('hx')
     lx = code_config.get('lx')
-    for i in range(code_config.get('k')):
+    for i in range(code_config.get('num_log_qubits')):
         w = distance_test(hx, lx[i, :])
         distance = min(distance, w)
 
     return distance
 
-
 def get_code_distance(
-        code_configs: List[Dict]
-    ):
-    """
-    Iterate over the list of code configurations and set the code distance attribute
-    """
-    # Save a pickle for the code configs before the distance calculation (as backup if something does not work in the distance calculation)
+      code_configs: List[Dict]
+  ):
+  """
+  Iterate over the list of code configurations and set the code distance attribute
+  """
+  # Save a pickle for the code configs before the distance calculation (as backup if something does not work in the distance calculation)
 
-    for config in code_configs:
-        try:
-            config['distance'] = calculate_code_distance(config)
-        except:
-            config['distance'] = 'FAIL'
-            continue    
+  for config in code_configs:
+      try:
+          config['distance'] = calculate_code_distance(config)
+      except Exception as e:
+          logging.warning('Error in calculating code distance: {}'.format(e))
+          config['distance'] = 'FAIL'
+          continue    
 
-    return code_configs
-
+  return code_configs
 
 if __name__ == '__main__':
+    start_time = time.time()
     logging.warning('------------------ STARTING CODE SEARCH ------------------')
     # Define the specific values for l, m, and weight
     l_value = range(6, 7) # only the value 6
@@ -261,6 +262,8 @@ if __name__ == '__main__':
     if 'good_configs_with_distance' in globals() and not None:
         save_code_configs(
             my_codes=good_configs,
-            file_name='codes_no_distance.pickle'
+            file_name='codes_with_distance.pickle'
         )
+    elapsed_time = round((time.time() - start_time) / 3600.0, 2)
     logging.warning('------------------ FINISHED CODE SEARCH ------------------')
+    logging.warning('Elapsed Time: {} hours.'.format(elapsed_time))
