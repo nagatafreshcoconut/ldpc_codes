@@ -5,14 +5,13 @@ import io
 import numpy as np
 import pickle
 from itertools import product
+import copy
 
 from mip import Model, xsum, minimize, BINARY
 from bposd.css import css_code
 
-### Surpress the print output of the css_code.test()
+### Surpress the print output of the css_code.test() ###
 original_stdout = sys.stdout
-# Redirect stdout to a dummy StringIO object
-sys.stdout = io.StringIO()
 
 import logging
 logging.basicConfig(
@@ -57,9 +56,10 @@ def search_codes_general(
     """
     good_configs = []
 
-    try:
+    
 
-        for l, m in product(l_range, m_range):
+    for l, m in product(l_range, m_range):
+        try:
             I_ell = np.identity(l, dtype=int)
             I_m = np.identity(m, dtype=int)
             x, y = {}, {}
@@ -112,7 +112,13 @@ def search_codes_general(
 
                                 # Construct and test the CSS code
                                 qcode = css_code(hx, hz)  # Define css_code, assuming it's defined elsewhere
+
+                                ### Surpress the print output of the css_code.test()
+                                # Redirect stdout to a dummy StringIO object
+                                sys.stdout = io.StringIO()
+
                                 if qcode.test():  # Define the test method for qcode
+                                    sys.stdout = original_stdout  # Reset stdout to original value to enable logging
                                     r = get_net_encoding_rate(qcode.K, qcode.N)  # Define get_net_encoding_rate
                                     encoding_rate_threshold = 1/15 if encoding_rate_threshold is None else encoding_rate_threshold
                                     if r > encoding_rate_threshold:  # Check your specific criteria for good configurations
@@ -130,8 +136,9 @@ def search_codes_general(
                                         }
                                         good_configs.append(code_config)
 
-    except Exception as e:
-        logging.warning('An error happened in the parameter space search.', e)
+        except Exception as e:
+            logging.warning('An error happened in the parameter space search.', e)
+            continue
         
     return good_configs
 
