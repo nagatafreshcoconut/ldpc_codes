@@ -6,6 +6,7 @@ import time
 import numpy as np
 import pickle
 from itertools import product
+from tqdm import tqdm
 
 from mip import Model, xsum, minimize, BINARY
 from bposd.css import css_code
@@ -58,7 +59,7 @@ def search_codes_general(
 
     
 
-    for l, m in product(l_range, m_range):
+    for l, m in tqdm(product(l_range, m_range), total=len(l_range)*len(m_range)):
         try:
             I_ell = np.identity(l, dtype=int)
             I_m = np.identity(m, dtype=int)
@@ -259,11 +260,11 @@ if __name__ == '__main__':
         file_name='codes_no_distance.pickle'
     )
     # good_configs_with_distance = get_code_distance(good_configs)
-    if 'good_configs_with_distance' in globals() and not None:
-        save_code_configs(
-            my_codes=good_configs,
-            file_name='codes_with_distance.pickle'
-        )
+    # if 'good_configs_with_distance' in globals() and not None:
+    #     save_code_configs(
+    #         my_codes=good_configs_with_distance,
+    #         file_name='codes_with_distance.pickle'
+    #     )
     elapsed_time = round((time.time() - start_time) / 3600.0, 2)
     logging.warning('------------------ FINISHED CODE SEARCH ------------------')
     logging.warning('Elapsed Time: {} hours.'.format(elapsed_time))

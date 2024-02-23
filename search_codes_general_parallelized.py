@@ -5,15 +5,17 @@ import time
 import numpy as np
 import pickle
 from itertools import product
+from tqdm import tqdm
+import multiprocessing
+
 from mip import Model, xsum, minimize, BINARY
 from bposd.css import css_code
-import logging
-import multiprocessing
 
 ### Surpress the print output of the css_code.test() ###
 original_stdout = sys.stdout
 
 # Setup logging
+import logging
 logging.basicConfig(
     level=logging.WARNING,
     format="%(asctime)s INFO %(message)s",
@@ -55,9 +57,7 @@ def search_codes_general(
     """
     good_configs = []
 
-    
-
-    for l, m in product(l_range, m_range):
+    for l, m in tqdm(product(l_range, m_range), total=len(l_range)*len(m_range)):
         try:
             I_ell = np.identity(l, dtype=int)
             I_m = np.identity(m, dtype=int)
@@ -82,6 +82,7 @@ def search_codes_general(
                         # Iterate over power ranges for each summand in A and B
                         for powers_A in product(power_range_A, repeat=weight_A):
                             for powers_B in product(power_range_B, repeat=weight_B):
+
                                 A, B = np.zeros((l*m, l*m), dtype=int), np.zeros((l*m, l*m), dtype=int)
                                 A_poly_sum, B_poly_sum = '', ''
 
@@ -234,7 +235,6 @@ def get_code_distance_parallel(code_configs):
 
 
 if __name__ == '__main__':
-    num_processes = multiprocessing.cpu_count() # Use all available cores
 
     start_time = time.time()
     logging.warning('------------------ STARTING CODE SEARCH ------------------')
@@ -246,8 +246,8 @@ if __name__ == '__main__':
 
     # Define the power ranges for summands in A and B
     # Adjust these ranges as per the specific code you're trying to reproduce
-    power_range_A = range(1, 4)  # Example range, adjust as needed
-    power_range_B = range(1, 4)  # Example range, adjust as needed
+    power_range_A = range(1, 3)  # Example range, adjust as needed
+    power_range_B = range(1, 3)  # Example range, adjust as needed
 
     # Search for good configurations (since interdependent cannot properly parallelized)
     good_configs = search_codes_general(
@@ -257,7 +257,6 @@ if __name__ == '__main__':
         power_range_A=power_range_A, 
         power_range_B=power_range_B,
         encoding_rate_threshold=1/15,
-        num_processes=num_processes
     )
     logging.warning('Found {} good code configurations.'.format(len(good_configs)))
     logging.warning('Example code configuration: {}'.format(good_configs[0]))
