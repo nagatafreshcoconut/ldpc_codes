@@ -1,4 +1,5 @@
 from typing import List, Dict, Optional
+import os
 import sys
 import io
 import time
@@ -8,7 +9,7 @@ from itertools import product
 from tqdm import tqdm
 import multiprocessing
 
-from mip import Model, xsum, minimize, BINARY
+from mip import Model, xsum, minimize, BINARY, OptimizationStatus
 from bposd.css import css_code
 
 ### Surpress the print output of the css_code.test() ###
@@ -30,11 +31,122 @@ def save_code_configs(
     with open(file_name, 'wb') as f:
         pickle.dump(my_codes, f)
 
+def save_intermediate_results(
+        code_configs: List[Dict], 
+        chunk_index: int, 
+        folder='intermediate_results_code_search'
+    ):
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    file_path = os.path.join(folder, f'codes_chunk_{chunk_index+1}.pickle')
+    with open(file_path, 'wb') as f:
+        pickle.dump(code_configs, f)
+
+def load_and_unify_intermediate_results(
+    folder='intermediate_results_code_search'
+):
+    unified_configs = []
+    
+    # List all pickle files in the specified folder
+    for filename in os.listdir(folder):
+        if filename.startswith('codes_chunk_') and filename.endswith('.pickle'):
+            file_path = os.path.join(folder, filename)
+            
+            # Load the content of each pickle file and extend the master list
+            with open(file_path, 'rb') as f:
+                configs = pickle.load(f)
+                unified_configs.extend(configs)
+                
+    return unified_configs
+
 def get_net_encoding_rate(
         k: int,
         n: int,
 ) -> float:
     return k / (2.*n)
+
+def calculate_total_iterations(l_range, m_range, weight_range, power_range_A, power_range_B):
+    total_iterations = 0
+    for l in l_range:
+        for m in m_range:
+            for weight in weight_range:
+                for weight_A in range(1, weight):  # Ensure at least one term in A and B
+                    weight_B = weight - weight_A
+                    summands_A_combinations = 2 ** weight_A
+                    summands_B_combinations = 2 ** weight_B
+                    powers_A_combinations = len(power_range_A) ** weight_A
+                    powers_B_combinations = len(power_range_B) ** weight_B
+                    total_iterations += summands_A_combinations * summands_B_combinations * powers_A_combinations * powers_B_combinations
+    return total_iterations
+
+def build_code(
+        l: int, 
+        m: int,
+        x: Dict[int, np.ndarray],
+        y: Dict[int, np.ndarray], 
+        summand_combo_A: List[str], 
+        summand_combo_B: List[str], 
+        powers_A: List[int], 
+        powers_B: List[int],
+        encoding_rate_threshold: Optional[float],
+        code_configs: List[Dict],
+    ):
+    
+    A, B = np.zeros((l*m, l*m), dtype=int), np.zeros((l*m, l*m), dtype=int)
+    A_poly_sum, B_poly_sum = '', ''
+
+    # Construct A with its summands and powers
+    for summand, power in zip(summand_combo_A, powers_A):
+        matrix = x[power] if summand == 'x' else y[power]
+        A += matrix
+        A_poly_sum += f"{summand}{power} + "
+
+    # Construct B with its summands and powers
+    for summand, power in zip(summand_combo_B, powers_B):
+        matrix = x[power] if summand == 'x' else y[power]
+        B += matrix
+        B_poly_sum += f"{summand}{power} + "
+
+    A = A % 2
+    B = B % 2
+
+    # Remove trailing ' + '
+    A_poly_sum = A_poly_sum.rstrip(' + ')
+    B_poly_sum = B_poly_sum.rstrip(' + ')
+
+    # Transpose matrices A and B
+    AT = np.transpose(A)
+    BT = np.transpose(B)
+
+    # Construct matrices hx and hz
+    hx = np.hstack((A, B))
+    hz = np.hstack((BT, AT))
+
+    # Construct and test the CSS code
+    qcode = css_code(hx, hz)  # Define css_code, assuming it's defined elsewhere
+
+    ### Surpress the print output of the css_code.test()
+    # Redirect stdout to a dummy StringIO object
+    sys.stdout = io.StringIO()
+
+    if qcode.test():  # Define the test method for qcode
+        sys.stdout = original_stdout  # Reset stdout to original value to enable logging
+        r = get_net_encoding_rate(qcode.K, qcode.N)  # Define get_net_encoding_rate
+        encoding_rate_threshold = 1/15 if encoding_rate_threshold is None else encoding_rate_threshold
+        code_config = {
+            'l': l,
+            'm': m,
+            'num_phys_qubits': qcode.N,
+            'num_log_qubits': qcode.K,
+            'lx': qcode.lx,
+            'hx': hx,
+            'k': qcode.lz.shape[0], 
+            'encoding_rate': r,
+            'encoding_rate_threshold_exceeded': r > encoding_rate_threshold,
+            'A_poly_sum': A_poly_sum,
+            'B_poly_sum': B_poly_sum
+        }
+        code_configs.append(code_config)
 
 def search_codes_general(
         l_range: range, 
@@ -55,7 +167,10 @@ def search_codes_general(
         - power_range_B: Range of possible values for exponents for terms in B (B is a sum over polynomials in x and y)
         - encoding_rate_threshold (float): the lower bound for codes to be saved for further analysis
     """
-    good_configs = []
+    code_configs = []
+    iteration_counter = 0
+    chunk_size = calculate_total_iterations(l_range, m_range, weight_range, power_range_A, power_range_B) // 10
+    chunk_index = 0
 
     for l, m in tqdm(product(l_range, m_range), total=len(l_range)*len(m_range)):
         try:
@@ -82,65 +197,23 @@ def search_codes_general(
                         # Iterate over power ranges for each summand in A and B
                         for powers_A in product(power_range_A, repeat=weight_A):
                             for powers_B in product(power_range_B, repeat=weight_B):
+                                build_code(l, m, x, y, summand_combo_A, summand_combo_B, powers_A, powers_B, encoding_rate_threshold, code_configs)
+                                iteration_counter += 1
 
-                                A, B = np.zeros((l*m, l*m), dtype=int), np.zeros((l*m, l*m), dtype=int)
-                                A_poly_sum, B_poly_sum = '', ''
-
-                                # Construct A with its summands and powers
-                                for summand, power in zip(summand_combo_A, powers_A):
-                                    matrix = x[power] if summand == 'x' else y[power]
-                                    A += matrix
-                                    A_poly_sum += f"{summand}{power} + "
-
-                                # Construct B with its summands and powers
-                                for summand, power in zip(summand_combo_B, powers_B):
-                                    matrix = x[power] if summand == 'x' else y[power]
-                                    B += matrix
-                                    B_poly_sum += f"{summand}{power} + "
-
-                                # Remove trailing ' + '
-                                A_poly_sum = A_poly_sum.rstrip(' + ')
-                                B_poly_sum = B_poly_sum.rstrip(' + ')
-
-                                # Transpose matrices A and B
-                                AT = np.transpose(A)
-                                BT = np.transpose(B)
-
-                                # Construct matrices hx and hz
-                                hx = np.hstack((A, B))
-                                hz = np.hstack((BT, AT))
-
-                                # Construct and test the CSS code
-                                qcode = css_code(hx, hz)  # Define css_code, assuming it's defined elsewhere
-
-                                ### Surpress the print output of the css_code.test()
-                                # Redirect stdout to a dummy StringIO object
-                                sys.stdout = io.StringIO()
-
-                                if qcode.test():  # Define the test method for qcode
-                                    sys.stdout = original_stdout  # Reset stdout to original value to enable logging
-                                    r = get_net_encoding_rate(qcode.K, qcode.N)  # Define get_net_encoding_rate
-                                    encoding_rate_threshold = 1/15 if encoding_rate_threshold is None else encoding_rate_threshold
-                                    if r > encoding_rate_threshold:  # Check your specific criteria for good configurations
-                                        code_config = {
-                                            'l': l,
-                                            'm': m,
-                                            'num_phys_qubits': qcode.N,
-                                            'num_log_qubits': qcode.K,
-                                            'lx': qcode.lx,
-                                            'hx': hx,
-                                            'k': qcode.lz.shape[0], 
-                                            'encoding_rate': r,
-                                            'A_poly_sum': A_poly_sum,
-                                            'B_poly_sum': B_poly_sum
-                                        }
-                                        good_configs.append(code_config)
-
+                                if iteration_counter >= chunk_size:
+                                    save_intermediate_results(code_configs, chunk_index)
+                                    code_configs = []  # Reset for the next chunk
+                                    chunk_index += 1
+                                    iteration_counter = 0
+                                
         except Exception as e:
             logging.warning('An error happened in the parameter space search: {}'.format(e))
             continue
-        
-    return good_configs
+    
+    # Save any remaining configurations after the loop
+    if code_configs:
+        save_intermediate_results(code_configs, chunk_index)
+
 
 def calculate_code_distance(
         code_config: Dict
@@ -155,7 +228,7 @@ def calculate_code_distance(
         # stab @ x = 0 mod 2
         # logicOp @ x = 1 mod 2
         # here stab is a binary matrix and logicOp is a binary vector
-        def distance_test(stab, logicOp):
+        def distance_test(stab, logicOp, code_config):
             # number of qubits
             n = stab.shape[1]
             # number of stabilizers
@@ -200,6 +273,9 @@ def calculate_code_distance(
             model+= xsum(weight[i] * x[i] for i in range(num_var)) == 1
 
             model.optimize()
+            if model.status != OptimizationStatus.OPTIMAL: # If not optimal, record the status and raise an exception
+                code_config['distance'] = f'Non-optimal solution: {model.status}'
+                raise Exception('Non-optimal solution: {}'.format(model.status))
 
             opt_val = sum([x[i].x for i in range(n)])
 
@@ -210,7 +286,7 @@ def calculate_code_distance(
         hx = code_config.get('hx')
         lx = code_config.get('lx')
         for i in range(code_config.get('num_log_qubits')):
-            w = distance_test(hx, lx[i, :])
+            w = distance_test(hx, lx[i, :], code_config)
             distance = min(distance, w)
 
         code_config['distance'] = distance
@@ -218,7 +294,8 @@ def calculate_code_distance(
     
     except Exception as e:
         logging.warning('An error happened in the distance calculation: {}'.format(e))
-        code_config['distance'] = 'Error'  # Indicate an error occurred
+        # Indicate an error occurred
+        code_config['distance'] = 'Error'
         return code_config
     
 
@@ -249,8 +326,12 @@ if __name__ == '__main__':
     power_range_A = range(1, 3)  # Example range, adjust as needed
     power_range_B = range(1, 3)  # Example range, adjust as needed
 
-    # Search for good configurations (since interdependent cannot properly parallelized)
-    good_configs = search_codes_general(
+    # Calculate the total number of iterations
+    total_iterations = calculate_total_iterations(l_value, m_value, weight_value, power_range_A, power_range_B)
+    logging.warning('Total iterations: {}'.format(total_iterations))
+
+    # # Search for good configurations (since interdependent cannot properly parallelized)
+    search_codes_general(
         l_range=l_value, 
         m_range=m_value, 
         weight_range=weight_value, 
@@ -258,14 +339,18 @@ if __name__ == '__main__':
         power_range_B=power_range_B,
         encoding_rate_threshold=1/15,
     )
-    logging.warning('Found {} good code configurations.'.format(len(good_configs)))
-    logging.warning('Example code configuration: {}'.format(good_configs[0]))
 
-    # Save intermediate results
-    save_code_configs(good_configs, 'codes_no_distance.pickle')
+    # Load and unify all intermediate results
+    unified_code_configs = load_and_unify_intermediate_results()
+    print(f"Total codes saved: {len(unified_code_configs)}")
+
+    # Save all code configurations before their distance was calculated
+    save_code_configs(unified_code_configs, 'codes_no_distance.pickle')
+    logging.warning('Saved all code configurations before their distance was calculated.')
+    logging.warning('Difference in codes saved vs. total iterations: {}'.format(len(unified_code_configs) - total_iterations))
 
     # Parallel calculation of code distances
-    # good_configs_with_distance = get_code_distance_parallel(good_configs)
+    # unified_code_configs_with_distance = get_code_distance_parallel(unified_code_configs)
     # Save final results
     # save_code_configs(good_configs_with_distance, 'codes_with_distance.pickle')
 
