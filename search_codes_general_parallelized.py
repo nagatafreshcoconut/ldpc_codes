@@ -1,4 +1,3 @@
-import itertools
 from typing import List, Dict, Optional
 import os
 import sys
@@ -66,17 +65,44 @@ def get_net_encoding_rate(
 ) -> float:
     return k / (2.*n)
 
+def get_valid_powers_for_summands(summand_combo, l, m, range_A, range_B):
+    """
+    Generates valid power combinations for a given summand combination,
+    respecting the constraints for 'x', 'y', 'z', and the specified ranges for A and B.
+
+    Args:
+    - summand_combo: A combination of summands ('x', 'y', 'z').
+    - l, m: The limits for 'x' and 'y', respectively. For 'z', the limit is max(l, m).
+    - range_A, range_B: Ranges of exponents for terms in A and B to be within.
+
+    Returns:
+    - A generator that yields valid combinations of powers for the summands.
+    """
+    # Define initial power ranges based on summand type
+    power_ranges = {
+        'x': range(max(1, min(range_A)), min(l, max(range_A))),
+        'y': range(max(1, min(range_B)), min(m, max(range_B))),
+        'z': range(max(1, min(min(range_A), min(range_B))), min(max(l, m), max(max(range_A), max(range_B))))
+    }
+
+    # Get the adjusted power range for each summand in the combination
+    ranges_for_combo = [power_ranges[summand] for summand in summand_combo]
+
+    # Use product to generate all valid combinations within the specified ranges
+    return product(*ranges_for_combo)
+
 def calculate_total_iterations(l_range, m_range, weight_range, power_range_A, power_range_B):
     total_iterations = 0
     for l, m in product(l_range, m_range):
         for weight in weight_range:
             for weight_A in range(1, weight):  # Ensure at least one term in A and B
                 weight_B = weight - weight_A
-                summands_A_combinations = 3 ** weight_A # 3 because of x, y, z
-                summands_B_combinations = 3 ** weight_B # 3 because of x, y, z
-                powers_A_combinations = len(power_range_A) ** weight_A
-                powers_B_combinations = len(power_range_B) ** weight_B
-                total_iterations += summands_A_combinations * summands_B_combinations * powers_A_combinations * powers_B_combinations
+                summands_A = list(product(['x', 'y', 'z'], repeat=weight_A))
+                summands_B = list(product(['x', 'y', 'z'], repeat=weight_B))
+                for summand_combo_A, summand_combo_B in product(summands_A, summands_B):
+                    for powers_A in get_valid_powers_for_summands(summand_combo_A, l, m, power_range_A, power_range_B):
+                        for powers_B in get_valid_powers_for_summands(summand_combo_B, l, m, power_range_A, power_range_B):
+                            total_iterations += 1
     return total_iterations
 
 def build_code(
@@ -183,15 +209,13 @@ def search_codes_general(
     """
     code_configs = []
     iteration_counter = 0
-    chunk_size = calculate_total_iterations(l_range, m_range, weight_range, power_range_A, power_range_B) // 10
+    chunk_size = calculate_total_iterations(l_range, m_range, weight_range, power_range_A, power_range_B) // 10 # 00
     chunk_index = 0
 
     for l, m in tqdm(product(l_range, m_range), total=len(l_range)*len(m_range)):
         try:
             I_ell = np.identity(l, dtype=int)
             I_m = np.identity(m, dtype=int)
-            I = np.identity(np.max([l, m]), dtype=int)
-            logging.warning('max([l, m]): {}'.format(np.max([l, m])))
             x, y, z = {}, {}, {}
 
             # Generate base matrices x and y
@@ -202,7 +226,7 @@ def search_codes_general(
 
             # Create base matrix z
             for k in range(np.max([l, m])):
-                z[k] = np.kron(np.roll(I, k, axis=1), np.roll(I, k, axis=1))
+                z[k] = np.kron(np.roll(I_ell, k, axis=1), np.roll(I_m, k, axis=1))
 
             # Iterate over weights and distribute them across A and B
             for weight in weight_range:
@@ -213,14 +237,17 @@ def search_codes_general(
                     summands_A = list(product(['x', 'y', 'z'], repeat=weight_A))
                     summands_B = list(product(['x', 'y', 'z'], repeat=weight_B))
 
-                    # logging.warning('summands_A: {}'.format(summands_A))
-                    # logging.warning('summands_B: {}'.format(summands_B))
-
                     for summand_combo_A, summand_combo_B in product(summands_A, summands_B):
+                        # Check for powers_A
                         # Iterate over power ranges for each summand in A and B
-                        for powers_A in product(power_range_A, repeat=weight_A):
-                            for powers_B in product(power_range_B, repeat=weight_B):
-                                build_code(l, m, x, y, z, summand_combo_A, summand_combo_B, powers_A, powers_B, encoding_rate_threshold, code_configs)
+                        for powers_A in get_valid_powers_for_summands(summand_combo_A, l, m, power_range_A, power_range_B):
+                            # Check for powers_B
+                            for powers_B in get_valid_powers_for_summands(summand_combo_B, l, m, power_range_A, power_range_B):
+                                try: 
+                                    build_code(l, m, x, y, z, summand_combo_A, summand_combo_B, powers_A, powers_B, encoding_rate_threshold, code_configs)
+                                except Exception as e:
+                                    logging.warning('An error happened in the code construction: {}'.format(e))
+                                    continue
                                 iteration_counter += 1
 
                                 if iteration_counter >= chunk_size:
@@ -339,9 +366,10 @@ def split_list(lst: List, num_chunks: int):
 def get_code_distance_parallel(code_configs):
     # Determine the number of processes to use
     num_processes = multiprocessing.cpu_count()
-
-    chunked_list = split_list(code_configs, 20) # Split the list into 20 chunks
+    chunked_list = split_list(code_configs, 1000) # Split the list into 1000 chunks
     
+    start_time = time.time()
+    logging.warning('------------------ START CODE DISTANCE CALCULATION ------------------')
     for i, chunk in enumerate(chunked_list):
         logging.warning('Start Code Distance Calculation for Chunk {}: with {} codes'.format(i+1, len(chunk)))
 
@@ -354,31 +382,9 @@ def get_code_distance_parallel(code_configs):
         # Save intermedite results
         save_intermediate_results(code_configs=code_configs_with_distance, chunk_index=i+1, folder='intermediate_results_code_distance')
         logging.warning('Saved intermediate code distance results for Chunk {}'.format(i+1))
-        
-    
-# def get_code_distance_parallel(code_configs):
-    
-#     checkpoint_size = len(code_configs) // 10  # 10% of the list's length
-#     results = []
-#     output_dir = "intermediate_results_distance_calculation"
 
-#     # Create the output directory if it doesn't exist
-#     os.makedirs(output_dir, exist_ok=True)
-
-#     # Create a multiprocessing pool
-#     num_processes = multiprocessing.cpu_count()
-#     with multiprocessing.Pool(processes=num_processes) as pool:
-#         for i, code_config in enumerate(pool.imap(calculate_code_distance, code_configs), 1):
-#             results.append(code_config)
-
-#             # Save intermediate results every 10%
-#             if i % checkpoint_size == 0 or i == len(code_configs):
-#                 checkpoint_index = (i // checkpoint_size) or 10  # Adjust for the last chunk
-#                 # Save the results to a pickle file at this checkpoint
-#                 save_intermediate_results(results, checkpoint_index-1, output_dir)
-#                 logging.warning(f'Saved intermediate results after processing {i} configurations in {output_dir}.')
-
-#     return results
+    logging.warning('------------------ FINISHED CODE DISTANCE CALCULATION ------------------')
+    logging.warning('Distance calculation took: {} hours.'.format(round((time.time() - start_time) / 3600.0, 2)))
 
 
 if __name__ == '__main__':
@@ -393,8 +399,19 @@ if __name__ == '__main__':
 
     # Define the power ranges for summands in A and B
     # Adjust these ranges as per the specific code you're trying to reproduce
-    power_range_A = range(1, 3)  # Example range, adjust as needed
-    power_range_B = range(1, 3)  # Example range, adjust as needed
+    power_range_A = range(2, 4)  # Example range, adjust as needed
+    power_range_B = range(2, 3)  # Example range, adjust as needed
+
+    ### TEST VALUES ###
+    # Define the specific values for l, m, and weight
+    l_value = range(2, 4) # only the value 6
+    m_value = range(2, 3) # only the value 6
+    weight_value = range(4, 5) # only the value 6
+
+    # Define the power ranges for summands in A and B
+    # Adjust these ranges as per the specific code you're trying to reproduce
+    power_range_A = range(1, 4)  # Example range, adjust as needed
+    power_range_B = range(1, 4)  # Example range, adjust as needed
 
     # Calculate the total number of iterations
     total_iterations = calculate_total_iterations(l_value, m_value, weight_value, power_range_A, power_range_B)
@@ -420,10 +437,10 @@ if __name__ == '__main__':
     logging.warning('Difference in codes saved vs. total iterations: {}'.format(len(unified_code_configs_no_distance) - total_iterations))
 
     # Parallel calculation of code distances
-    get_code_distance_parallel(unified_code_configs_no_distance)
-    # Save final results
-    unified_code_configs_with_distance = load_and_unify_intermediate_results(folder='intermediate_results_code_distance')
-    save_code_configs(unified_code_configs_with_distance, 'codes_with_distance.pickle')
+    # get_code_distance_parallel(unified_code_configs_no_distance)
+    # # Save final results
+    # unified_code_configs_with_distance = load_and_unify_intermediate_results(folder='intermediate_results_code_distance')
+    # save_code_configs(unified_code_configs_with_distance, 'codes_with_distance.pickle')
 
     elapsed_time = round((time.time() - start_time) / 3600.0, 2)
     logging.warning('------------------ FINISHED CODE SEARCH ------------------')
