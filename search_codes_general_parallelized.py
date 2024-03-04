@@ -1,3 +1,4 @@
+import itertools
 from typing import List, Dict, Optional
 import os
 import sys
@@ -38,7 +39,7 @@ def save_intermediate_results(
     ):
     if not os.path.exists(folder):
         os.makedirs(folder)
-    file_path = os.path.join(folder, f'codes_chunk_{chunk_index+1}.pickle')
+    file_path = os.path.join(folder, f'codes_chunk_{chunk_index}.pickle')
     with open(file_path, 'wb') as f:
         pickle.dump(code_configs, f)
 
@@ -67,16 +68,15 @@ def get_net_encoding_rate(
 
 def calculate_total_iterations(l_range, m_range, weight_range, power_range_A, power_range_B):
     total_iterations = 0
-    for l in l_range:
-        for m in m_range:
-            for weight in weight_range:
-                for weight_A in range(1, weight):  # Ensure at least one term in A and B
-                    weight_B = weight - weight_A
-                    summands_A_combinations = 2 ** weight_A
-                    summands_B_combinations = 2 ** weight_B
-                    powers_A_combinations = len(power_range_A) ** weight_A
-                    powers_B_combinations = len(power_range_B) ** weight_B
-                    total_iterations += summands_A_combinations * summands_B_combinations * powers_A_combinations * powers_B_combinations
+    for l, m in product(l_range, m_range):
+        for weight in weight_range:
+            for weight_A in range(1, weight):  # Ensure at least one term in A and B
+                weight_B = weight - weight_A
+                summands_A_combinations = 3 ** weight_A # 3 because of x, y, z
+                summands_B_combinations = 3 ** weight_B # 3 because of x, y, z
+                powers_A_combinations = len(power_range_A) ** weight_A
+                powers_B_combinations = len(power_range_B) ** weight_B
+                total_iterations += summands_A_combinations * summands_B_combinations * powers_A_combinations * powers_B_combinations
     return total_iterations
 
 def build_code(
@@ -84,6 +84,7 @@ def build_code(
         m: int,
         x: Dict[int, np.ndarray],
         y: Dict[int, np.ndarray], 
+        z: Dict[int, np.ndarray], 
         summand_combo_A: List[str], 
         summand_combo_B: List[str], 
         powers_A: List[int], 
@@ -97,13 +98,23 @@ def build_code(
 
     # Construct A with its summands and powers
     for summand, power in zip(summand_combo_A, powers_A):
-        matrix = x[power] if summand == 'x' else y[power]
+        if summand == 'x':
+            matrix = x[power]
+        elif summand == 'y':
+            matrix = y[power]
+        elif summand == 'z':
+            matrix = z[power]
         A += matrix
         A_poly_sum += f"{summand}{power} + "
 
     # Construct B with its summands and powers
     for summand, power in zip(summand_combo_B, powers_B):
-        matrix = x[power] if summand == 'x' else y[power]
+        if summand == 'x':
+            matrix = x[power]
+        elif summand == 'y':
+            matrix = y[power]
+        elif summand == 'z':
+            matrix = z[power]
         B += matrix
         B_poly_sum += f"{summand}{power} + "
 
@@ -140,9 +151,12 @@ def build_code(
             'num_log_qubits': qcode.K,
             'lx': qcode.lx,
             'hx': hx,
+            'hz': hz,
             'k': qcode.lz.shape[0], 
             'encoding_rate': r,
             'encoding_rate_threshold_exceeded': r > encoding_rate_threshold,
+            'A': A,
+            'B': B,
             'A_poly_sum': A_poly_sum,
             'B_poly_sum': B_poly_sum
         }
@@ -176,7 +190,9 @@ def search_codes_general(
         try:
             I_ell = np.identity(l, dtype=int)
             I_m = np.identity(m, dtype=int)
-            x, y = {}, {}
+            I = np.identity(np.max([l, m]), dtype=int)
+            logging.warning('max([l, m]): {}'.format(np.max([l, m])))
+            x, y, z = {}, {}, {}
 
             # Generate base matrices x and y
             for i in range(l):
@@ -184,24 +200,31 @@ def search_codes_general(
             for j in range(m):
                 y[j] = np.kron(I_ell, np.roll(I_m, j, axis=1))
 
+            # Create base matrix z
+            for k in range(np.max([l, m])):
+                z[k] = np.kron(np.roll(I, k, axis=1), np.roll(I, k, axis=1))
+
             # Iterate over weights and distribute them across A and B
             for weight in weight_range:
                 for weight_A in range(1, weight):  # Ensure at least one term in A and B # TODO: Could think of also raising to the power of zero leading to identity matrix
                     weight_B = weight - weight_A
 
                     # Generate all combinations of summands in A and B with their respective weights
-                    summands_A = list(product(['x', 'y'], repeat=weight_A))
-                    summands_B = list(product(['x', 'y'], repeat=weight_B))
+                    summands_A = list(product(['x', 'y', 'z'], repeat=weight_A))
+                    summands_B = list(product(['x', 'y', 'z'], repeat=weight_B))
+
+                    # logging.warning('summands_A: {}'.format(summands_A))
+                    # logging.warning('summands_B: {}'.format(summands_B))
 
                     for summand_combo_A, summand_combo_B in product(summands_A, summands_B):
                         # Iterate over power ranges for each summand in A and B
                         for powers_A in product(power_range_A, repeat=weight_A):
                             for powers_B in product(power_range_B, repeat=weight_B):
-                                build_code(l, m, x, y, summand_combo_A, summand_combo_B, powers_A, powers_B, encoding_rate_threshold, code_configs)
+                                build_code(l, m, x, y, z, summand_combo_A, summand_combo_B, powers_A, powers_B, encoding_rate_threshold, code_configs)
                                 iteration_counter += 1
 
                                 if iteration_counter >= chunk_size:
-                                    save_intermediate_results(code_configs, chunk_index)
+                                    save_intermediate_results(code_configs, chunk_index+1)
                                     code_configs = []  # Reset for the next chunk
                                     chunk_index += 1
                                     iteration_counter = 0
@@ -298,17 +321,64 @@ def calculate_code_distance(
         code_config['distance'] = 'Error'
         return code_config
     
+def split_list(lst: List, num_chunks: int):
+    """
+    Splits lst into n equally sized sublists.
+
+    Args:
+    - lst: The list to be split.
+    - n: The number of sublists to split lst into.
+
+    Returns:
+    - A list of sublists, where each sublist is as equal in size as possible.
+    """
+    k, m = divmod(len(lst), num_chunks)
+    return [lst[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(num_chunks)]
+    
 
 def get_code_distance_parallel(code_configs):
     # Determine the number of processes to use
     num_processes = multiprocessing.cpu_count()
 
-    with multiprocessing.Pool(processes=num_processes) as pool:
-        # Map the calculate_code_distance function across all configurations
-        # The pool.map function will automatically split the iterable into chunks and assign them to the processes
-        code_configs_with_distance = pool.map(calculate_code_distance, code_configs)
+    chunked_list = split_list(code_configs, 20) # Split the list into 20 chunks
+    
+    for i, chunk in enumerate(chunked_list):
+        logging.warning('Start Code Distance Calculation for Chunk {}: with {} codes'.format(i+1, len(chunk)))
 
-    return code_configs_with_distance
+        with multiprocessing.Pool(processes=num_processes) as pool:
+            # Map the calculate_code_distance function across all configurations
+            # The pool.map function will automatically split the iterable into chunks and assign them to the processes
+            code_configs_with_distance = pool.map(calculate_code_distance, chunk)
+
+        logging.warning('Finished Code Distance Calculation for Chunk {}'.format(i+1))
+        # Save intermedite results
+        save_intermediate_results(code_configs=code_configs_with_distance, chunk_index=i+1, folder='intermediate_results_code_distance')
+        logging.warning('Saved intermediate code distance results for Chunk {}'.format(i+1))
+        
+    
+# def get_code_distance_parallel(code_configs):
+    
+#     checkpoint_size = len(code_configs) // 10  # 10% of the list's length
+#     results = []
+#     output_dir = "intermediate_results_distance_calculation"
+
+#     # Create the output directory if it doesn't exist
+#     os.makedirs(output_dir, exist_ok=True)
+
+#     # Create a multiprocessing pool
+#     num_processes = multiprocessing.cpu_count()
+#     with multiprocessing.Pool(processes=num_processes) as pool:
+#         for i, code_config in enumerate(pool.imap(calculate_code_distance, code_configs), 1):
+#             results.append(code_config)
+
+#             # Save intermediate results every 10%
+#             if i % checkpoint_size == 0 or i == len(code_configs):
+#                 checkpoint_index = (i // checkpoint_size) or 10  # Adjust for the last chunk
+#                 # Save the results to a pickle file at this checkpoint
+#                 save_intermediate_results(results, checkpoint_index-1, output_dir)
+#                 logging.warning(f'Saved intermediate results after processing {i} configurations in {output_dir}.')
+
+#     return results
 
 
 if __name__ == '__main__':
@@ -341,18 +411,19 @@ if __name__ == '__main__':
     )
 
     # Load and unify all intermediate results
-    unified_code_configs = load_and_unify_intermediate_results()
-    print(f"Total codes saved: {len(unified_code_configs)}")
+    unified_code_configs_no_distance = load_and_unify_intermediate_results(folder='intermediate_results_code_search')
+    print(f"Total codes saved: {len(unified_code_configs_no_distance)}")
 
     # Save all code configurations before their distance was calculated
-    save_code_configs(unified_code_configs, 'codes_no_distance.pickle')
+    save_code_configs(unified_code_configs_no_distance, 'codes_no_distance.pickle')
     logging.warning('Saved all code configurations before their distance was calculated.')
-    logging.warning('Difference in codes saved vs. total iterations: {}'.format(len(unified_code_configs) - total_iterations))
+    logging.warning('Difference in codes saved vs. total iterations: {}'.format(len(unified_code_configs_no_distance) - total_iterations))
 
     # Parallel calculation of code distances
-    # unified_code_configs_with_distance = get_code_distance_parallel(unified_code_configs)
+    get_code_distance_parallel(unified_code_configs_no_distance)
     # Save final results
-    # save_code_configs(good_configs_with_distance, 'codes_with_distance.pickle')
+    unified_code_configs_with_distance = load_and_unify_intermediate_results(folder='intermediate_results_code_distance')
+    save_code_configs(unified_code_configs_with_distance, 'codes_with_distance.pickle')
 
     elapsed_time = round((time.time() - start_time) / 3600.0, 2)
     logging.warning('------------------ FINISHED CODE SEARCH ------------------')
