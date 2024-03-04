@@ -195,6 +195,7 @@ def search_codes_general(
         power_range_A: range, 
         power_range_B: range, 
         encoding_rate_threshold: Optional[float],
+        max_size_mb=1  # Maximum size for each batch file in MB
     ):
     """
     Searching the parameter space for good bicycle codes (BC)
@@ -208,9 +209,8 @@ def search_codes_general(
         - encoding_rate_threshold (float): the lower bound for codes to be saved for further analysis
     """
     code_configs = []
-    iteration_counter = 0
-    chunk_size = calculate_total_iterations(l_range, m_range, weight_range, power_range_A, power_range_B) // 10 # 00
-    chunk_index = 0
+    chunk_index = 0  # To name the output files uniquely
+    max_size_bytes = max_size_mb * 1024 * 1024  # Convert MB to bytes
 
     for l, m in tqdm(product(l_range, m_range), total=len(l_range)*len(m_range)):
         try:
@@ -245,16 +245,18 @@ def search_codes_general(
                             for powers_B in get_valid_powers_for_summands(summand_combo_B, l, m, power_range_A, power_range_B):
                                 try: 
                                     build_code(l, m, x, y, z, summand_combo_A, summand_combo_B, powers_A, powers_B, encoding_rate_threshold, code_configs)
+                                    temp_batch_size = len(pickle.dumps(code_configs))
+
+                                    if temp_batch_size > max_size_bytes:
+                                        # Save the current batch and start a new one
+                                        print(len(code_configs))
+                                        save_intermediate_results(code_configs, chunk_index+1)
+                                        chunk_index += 1
+                                        code_configs = []
+                                
                                 except Exception as e:
                                     logging.warning('An error happened in the code construction: {}'.format(e))
                                     continue
-                                iteration_counter += 1
-
-                                if iteration_counter >= chunk_size:
-                                    save_intermediate_results(code_configs, chunk_index+1)
-                                    code_configs = []  # Reset for the next chunk
-                                    chunk_index += 1
-                                    iteration_counter = 0
                                 
         except Exception as e:
             logging.warning('An error happened in the parameter space search: {}'.format(e))
@@ -262,7 +264,7 @@ def search_codes_general(
     
     # Save any remaining configurations after the loop
     if code_configs:
-        save_intermediate_results(code_configs, chunk_index)
+        save_intermediate_results(code_configs, chunk_index+1)
 
 
 def calculate_code_distance(
@@ -425,22 +427,34 @@ if __name__ == '__main__':
         power_range_A=power_range_A, 
         power_range_B=power_range_B,
         encoding_rate_threshold=1/15,
+        max_size_mb=50 # Maximum size for each batch file in MB
     )
 
     # Load and unify all intermediate results
-    unified_code_configs_no_distance = load_and_unify_intermediate_results(folder='intermediate_results_code_search')
-    print(f"Total codes saved: {len(unified_code_configs_no_distance)}")
+    try:
+        unified_code_configs_no_distance = load_and_unify_intermediate_results(folder='intermediate_results_code_search')
+        # Save all code configurations before their distance was calculated
+        save_code_configs(unified_code_configs_no_distance, 'codes_no_distance.pickle')
+        logging.warning("Total codes saved: {}".format(len(unified_code_configs_no_distance)))
+        logging.warning('Saved all code configurations before their distance was calculated.')
+        logging.warning('Difference in codes saved vs. total iterations: {}'.format(len(unified_code_configs_no_distance) - total_iterations))
 
-    # Save all code configurations before their distance was calculated
-    save_code_configs(unified_code_configs_no_distance, 'codes_no_distance.pickle')
-    logging.warning('Saved all code configurations before their distance was calculated.')
-    logging.warning('Difference in codes saved vs. total iterations: {}'.format(len(unified_code_configs_no_distance) - total_iterations))
+    except Exception as e:
+        logging.warning('An error happened in the loading and unification of intermediate results: {}'.format(e))
+        logging.warning('Probably the combined size of the intermediate results is too large to be combined into one pickle.')
 
+    
     # Parallel calculation of code distances
     # get_code_distance_parallel(unified_code_configs_no_distance)
     # # Save final results
-    # unified_code_configs_with_distance = load_and_unify_intermediate_results(folder='intermediate_results_code_distance')
-    # save_code_configs(unified_code_configs_with_distance, 'codes_with_distance.pickle')
+    try:
+        unified_code_configs_with_distance = load_and_unify_intermediate_results(folder='intermediate_results_code_distance')
+        # Save all code configurations after their distance was calculated
+        save_code_configs(unified_code_configs_with_distance, 'codes_with_distance.pickle')
+        logging.warning('Saved all code configurations after their distance was calculated.')
+    except Exception as e:
+        logging.warning('An error happened in the loading and unification of intermediate results: {}'.format(e))
+        logging.warning('Probably the combined size of the intermediate results is too large to be combined into one pickle.')
 
     elapsed_time = round((time.time() - start_time) / 3600.0, 2)
     logging.warning('------------------ FINISHED CODE SEARCH ------------------')
