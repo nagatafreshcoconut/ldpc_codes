@@ -10,11 +10,20 @@ original_stdout = sys.stdout
 # Redirect stdout to a dummy StringIO object
 sys.stdout = io.StringIO()
 
+
 def get_net_encoding_rate(k, n):
-    return k / (2*n)
+    return k / (2 * n)
+
 
 def process_combination(args):
-    ell, m, fixed_x_exponent_a, fixed_y_exponent_b, num_summands_a, num_summands_b = args
+    (
+        ell,
+        m,
+        fixed_x_exponent_a,
+        fixed_y_exponent_b,
+        num_summands_a,
+        num_summands_b,
+    ) = args
     good_configs = []
     I_ell = np.identity(ell, dtype=int)
     I_m = np.identity(m, dtype=int)
@@ -42,8 +51,16 @@ def process_combination(args):
             # Placeholder for additional processing, like constructing and testing qcodes
 
             # Construct polynomial sum strings for A and B
-            A_poly_sum = f"x{fixed_x_exponent_a}" + " + " + " + ".join(f"y{idx}" for idx in combo_a)
-            B_poly_sum = f"y{fixed_y_exponent_b}" + " + " + " + ".join(f"x{idx}" for idx in combo_b)
+            A_poly_sum = (
+                f"x{fixed_x_exponent_a}"
+                + " + "
+                + " + ".join(f"y{idx}" for idx in combo_a)
+            )
+            B_poly_sum = (
+                f"y{fixed_y_exponent_b}"
+                + " + "
+                + " + ".join(f"x{idx}" for idx in combo_b)
+            )
 
             AT = np.transpose(A)
             BT = np.transpose(B)
@@ -54,16 +71,15 @@ def process_combination(args):
             qcode = css_code(hx, hz)
             r = get_net_encoding_rate(qcode.K, qcode.N)
 
-            if qcode.test() and r > 1/15:
-
+            if qcode.test() and r > 1 / 15:
                 code_config = {
-                    'ell': ell,
-                    'm': m,
-                    'n_phys_qubits': qcode.N,
-                    'n_log_qubits': qcode.K,
-                    'encoding_rate': r,
-                    'A_poly_sum': A_poly_sum,
-                    'B_poly_sum': B_poly_sum
+                    "ell": ell,
+                    "m": m,
+                    "n_phys_qubits": qcode.N,
+                    "n_log_qubits": qcode.K,
+                    "encoding_rate": r,
+                    "A_poly_sum": A_poly_sum,
+                    "B_poly_sum": B_poly_sum,
                 }
                 good_configs.append(code_config)
 

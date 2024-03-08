@@ -1,57 +1,40 @@
-import sys
-import time
-from qec_code_search_lib import (
-    search_code_space, 
-    calculate_total_iterations
-)
+from qec_code_search_lib import main
 
-# Setup logging
-import logging
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(asctime)s INFO %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    stream=sys.stdout,
-)
-    
+"""
+Param Config 1: {'l_value': [2], 'm_value': [2, 3], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 2: {'l_value': [2], 'm_value': [4, 5], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 3: {'l_value': [2], 'm_value': [6, 7], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 4: {'l_value': [2, 3], 'm_value': [8, 2], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 5: {'l_value': [3], 'm_value': [3, 4], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 6: {'l_value': [3], 'm_value': [5, 6], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 7: {'l_value': [3], 'm_value': [8, 7], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 8: {'l_value': [4], 'm_value': [2, 3], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 9: {'l_value': [4], 'm_value': [4, 5], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 10: {'l_value': [4], 'm_value': [6, 7], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 11: {'l_value': [4, 5], 'm_value': [8, 2], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 12: {'l_value': [5], 'm_value': [3, 4], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 13: {'l_value': [5], 'm_value': [5, 6], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 14: {'l_value': [5], 'm_value': [8, 7], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 15: {'l_value': [6], 'm_value': [2, 3], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 16: {'l_value': [6], 'm_value': [4, 5], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 17: {'l_value': [6], 'm_value': [6, 7], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 18: {'l_value': [6, 7], 'm_value': [8, 2], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 19: {'l_value': [7], 'm_value': [3, 4], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 20: {'l_value': [7], 'm_value': [5, 6], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 21: {'l_value': [7], 'm_value': [8, 7], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 22: {'l_value': [8], 'm_value': [2, 3], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 23: {'l_value': [8], 'm_value': [4, 5], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 24: {'l_value': [8], 'm_value': [6, 7], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+Param Config 25: {'l_value': [8], 'm_value': [8], 'weight_value': [4, 5, 6], 'power_range_A': [1, 2, 3, 4, 5, 6, 7], 'power_range_B': [1, 2, 3, 4, 5, 6, 7]}
+"""
 
 if __name__ == '__main__':
 
-    l_range_identifier = 2  # Example, adjust as needed
-    m_range_identifier = 2  # Example, adjust as needed
-
-    l_value = range(l_range_identifier, l_range_identifier + 1)
-    m_value = range(m_range_identifier, m_range_identifier + 1)
-    
-    start_time = time.time()
-    # Define the specific values for l, m, and weight
-    weight_value = range(4, 7)
-    slice_identifier = f"slice_l{l_value.start}-{l_value.stop}_m{m_value.start}-{m_value.stop}_weight_{weight_value.start}-{weight_value.stop}"
-
-
-    # Define the power ranges for summands in A and B
-    # Adjust these ranges as per the specific code you're trying to reproduce
-    power_range_A = range(1, 7)  # Example range, adjust as needed
-    power_range_B = range(1, 7)  # Example range, adjust as needed
-
-    logging.warning('------------------ STARTING CODE SEARCH FOR SLICE: l_{}-{}, m_{}-{}, weight_{}{}------------------'.format(l_value.start, l_value.stop, m_value.start, m_value.stop, weight_value.start, weight_value.stop))
-
-    # Calculate the total number of iterations
-    total_iterations = calculate_total_iterations(l_value, m_value, weight_value, power_range_A, power_range_B)
-    logging.warning('Total iterations: {} thousands'.format(total_iterations / 1e3))
-
-    # # Search for good configurations (since interdependent cannot properly parallelized)
-    search_code_space(
-        l_range=l_value, 
-        m_range=m_value, 
-        weight_range=weight_value, 
-        power_range_A=power_range_A, 
-        power_range_B=power_range_B,
-        encoding_rate_threshold=1/15,
-        slice_identifier=slice_identifier,
-        max_size_mb=50, # Maximum size for each batch file in MB
-    )
-
-    elapsed_time = round((time.time() - start_time) / 3600.0, 2)
-    logging.warning('------------------ FINISHED CODE SEARCH ------------------')
-    logging.warning('Elapsed Time: {} hours.'.format(elapsed_time))
+    param_space = {
+        'l_value': [2], 
+        'm_value': [2, 3], 
+        'weight_value': [4, 5, 6], 
+        'power_range_A': [1, 2, 3, 4, 5, 6, 7], 
+        'power_range_B': [1, 2, 3, 4, 5, 6, 7]
+    }
+    main(param_space)
