@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
     param_space = {
         'l_value': [2], 
-        'm_value': [2, 3], 
+        'm_value': [2], 
         'weight_value': [4, 5, 6], 
         'power_range_A': [1, 2, 3, 4, 5, 6, 7], 
         'power_range_B': [1, 2, 3, 4, 5, 6, 7]

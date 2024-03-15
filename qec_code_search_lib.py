@@ -4,6 +4,7 @@ import sys
 import io
 import time
 import numpy as np
+from scipy.sparse import csr_matrix, hstack
 import pickle
 from itertools import product
 from tqdm import tqdm
@@ -202,6 +203,8 @@ def build_code(
     sys.stdout = io.StringIO()
 
     if qcode.test():  # Define the test method for qcode
+        if qcode.K == 0: # If the code has no logical qubits, skip it
+            return
         sys.stdout = original_stdout  # Reset stdout to original value to enable logging
         r = get_net_encoding_rate(qcode.K, qcode.N)  # Define get_net_encoding_rate
         encoding_rate_threshold = (
@@ -212,14 +215,10 @@ def build_code(
             "m": m,
             "num_phys_qubits": qcode.N,
             "num_log_qubits": qcode.K,
-            "lx": qcode.lx,
-            "hx": hx,
-            "hz": hz,
-            "k": qcode.lz.shape[0],
+            "lx": csr_matrix(qcode.lx),
+            "hx": csr_matrix(hx),
             "encoding_rate": r,
             "encoding_rate_threshold_exceeded": r > encoding_rate_threshold,
-            "A": A,
-            "B": B,
             "A_poly_sum": A_poly_sum,
             "B_poly_sum": B_poly_sum,
         }

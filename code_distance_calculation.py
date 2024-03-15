@@ -159,8 +159,8 @@ def calculate_code_distance(code_config: Dict) -> int:
             return int(opt_val)
 
         distance = code_config.get("num_phys_qubits")
-        hx = code_config.get("hx")
-        lx = code_config.get("lx")
+        hx = code_config.get("hx").toarray()
+        lx = code_config.get("lx").toarray()
         for i in range(code_config.get("num_log_qubits")):
             w = distance_test(hx, lx[i, :], code_config)
             distance = min(distance, w)
