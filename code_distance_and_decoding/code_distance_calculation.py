@@ -3,9 +3,9 @@ import os
 import sys
 import time
 import numpy as np
+from scipy.sparse import csr_matrix
 import pickle
 from tqdm import tqdm
-import shutil
 import multiprocessing
 
 from mip import Model, xsum, minimize, BINARY, OptimizationStatus
@@ -53,9 +53,7 @@ def save_intermediate_results(
         pickle.dump(code_configs, f)
 
 
-def load_and_unify_intermediate_results(
-    num_known_files, subfolder="intermediate_results_code_search"
-):
+def load_and_unify_intermediate_results(subfolder="intermediate_results_code_search"):
     unified_configs, files_to_delete = (
         [],
         [],
@@ -89,8 +87,6 @@ def load_and_unify_intermediate_results(
     # Delete the intermediate files
     for file_path in files_to_delete:
         os.remove(file_path)
-
-    return unified_configs
 
 
 def calculate_code_distance(code_config: Dict) -> int:
@@ -178,14 +174,6 @@ def calculate_code_distance(code_config: Dict) -> int:
         return code_config
 
 
-def dummy_operation(code_config: List[Dict]):
-    """
-    Dummy operation to simulate the time it takes to calculate the code distance for a given code configuration
-    """
-    code_config["distance"] = "dummy_value"
-    return code_config
-
-
 def get_code_distance_parallel(
     code_configs: List[Dict], num_known_files: int, original_subfolder_name: str
 ):
@@ -231,7 +219,7 @@ def get_code_distance_parallel(
 
     # Once all chunks are processed, unify the intermediate results and clean up
     try:
-        load_and_unify_intermediate_results(num_known_files, subfolder=result_subfolder)
+        load_and_unify_intermediate_results(subfolder=result_subfolder)
     except Exception as e:
         logging.warning(
             f"An error occurred while unifying the intermediate results: {e}"

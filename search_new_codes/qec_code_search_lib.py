@@ -4,7 +4,7 @@ import sys
 import io
 import time
 import numpy as np
-from scipy.sparse import csr_matrix, hstack
+from scipy.sparse import csr_matrix
 import pickle
 from itertools import product
 from tqdm import tqdm
@@ -79,10 +79,10 @@ def format_slice_identifier(l_value, m_value, weight_value) -> str:
     # Format weight_value part by joining with commas
     weight_part = "".join(map(str, weight_value_sorted))
 
-
     # Combine all parts
     slice_identifier = f"l{l_part}_m{m_part}_weight{weight_part}"
     return slice_identifier
+
 
 def get_net_encoding_rate(
     k: int,
@@ -203,7 +203,7 @@ def build_code(
     sys.stdout = io.StringIO()
 
     if qcode.test():  # Define the test method for qcode
-        if qcode.K == 0: # If the code has no logical qubits, skip it
+        if qcode.K == 0:  # If the code has no logical qubits, skip it
             return
         sys.stdout = original_stdout  # Reset stdout to original value to enable logging
         r = get_net_encoding_rate(qcode.K, qcode.N)  # Define get_net_encoding_rate

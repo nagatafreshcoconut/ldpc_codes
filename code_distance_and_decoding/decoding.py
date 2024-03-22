@@ -15,6 +15,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+
 plt.style.use("ggplot")
 from scipy.sparse import csr_matrix
 import pickle
@@ -28,10 +29,12 @@ from panqec.codes import Color666PlanarCode
 from panqec.bpauli import get_effective_error
 from panqec.codes import Toric2DCode
 from panqec.config import CODES, ERROR_MODELS, DECODERS
+
 print(CODES.keys())
 
 
 import logging
+
 logging.basicConfig(
     level=logging.WARNING,
     format="%(asctime)s INFO %(message)s",
@@ -195,19 +198,19 @@ def rebuild_hz_from_hx(hx):
 
     return csr_matrix(hz)
 
+
 def save_intermediate_results(
     code_configs: List[Dict], chunk_index: int, result_subfolder: str
 ):
     if not os.path.exists(result_subfolder):
         os.makedirs(result_subfolder)
-    file_path = os.path.join(
-        result_subfolder, f"codes_decoded_{chunk_index}.pickle"
-    )
+    file_path = os.path.join(result_subfolder, f"codes_decoded_{chunk_index}.pickle")
     with open(file_path, "wb") as f:
         pickle.dump(code_configs, f)
 
+
 def load_and_unify_intermediate_results(
-    subfolder="intermediate_results_code_distance_during_ongoing_code_search"
+    subfolder="intermediate_results_code_distance_during_ongoing_code_search",
 ):
     unified_configs, files_to_delete = (
         [],
@@ -243,19 +246,22 @@ def load_and_unify_intermediate_results(
     for file_path in files_to_delete:
         os.remove(file_path)
 
+
 def load_codes_from_pickle(file_path):
     with open(file_path, "rb") as f:
         code_configs = pickle.load(f)
 
     # Add stabilizer check Hz to the code configs
     for code in code_configs:
-        code['hz'] = rebuild_hz_from_hx(code['hx'].toarray())
+        code["hz"] = rebuild_hz_from_hx(code["hx"].toarray())
     return code_configs
+
 
 def load_from_pickle(file_path):
     with open(file_path, "rb") as f:
         data = pickle.load(f)
     return data
+
 
 def split_list(lst: List, num_chunks: int = 500):
     """
@@ -272,6 +278,7 @@ def split_list(lst: List, num_chunks: int = 500):
     return [
         lst[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(num_chunks)
     ]
+
 
 def plot_results(effective_error, error_rate):
     effective_error_all = np.any(
@@ -315,10 +322,7 @@ def get_input_data(
                 "r_z": 1 / 3,
             },
         },
-        "decoder": {
-            "name": decoder,
-            "parameters": {}
-        },
+        "decoder": {"name": decoder, "parameters": {}},
         "error_rate": np.linspace(
             min_error_rate, max_error_rate, n_error_rate
         ).tolist(),  # List of physical error rates
@@ -327,6 +331,7 @@ def get_input_data(
         "filename": filename,  ##name to save
     }
 
+
 def get_code_details():
     name_code = "Toric"
     decoder = "MatchingDecoder"
@@ -334,42 +339,69 @@ def get_code_details():
     size_code = 6
     return name_code, decoder, error_model, size_code
 
+
 def get_decoding_details():
-    n_trials=1e4 #repetititons to get statistics
-    rounds=4 #rounds of Error correction applied
+    n_trials = 1e4  # repetititons to get statistics
+    rounds = 4  # rounds of Error correction applied
 
-    min_error_rate=1e-2
-    max_error_rate=1e-1
+    min_error_rate = 1e-2
+    max_error_rate = 1e-1
 
-    n_error_rate=20
+    n_error_rate = 20
 
     return n_trials, rounds, min_error_rate, max_error_rate, n_error_rate
+
 
 def perform_decoding(code):
     rng = np.random.default_rng()
 
     name_code, decoder, error_model, size_code = get_code_details()
-    n_trials, rounds, min_error_rate, max_error_rate, n_error_rate = get_decoding_details()
+    (
+        n_trials,
+        rounds,
+        min_error_rate,
+        max_error_rate,
+        n_error_rate,
+    ) = get_decoding_details()
 
-    Hx, Hz = code['hx'], code['hz']
+    Hx, Hz = code["hx"], code["hz"]
 
-    parameters_code={"Hx_in":Hx, "Hz_in":Hz,"name":name_code+"_L"+str(size_code),"L_in":size_code}
+    parameters_code = {
+        "Hx_in": Hx,
+        "Hz_in": Hz,
+        "name": name_code + "_L" + str(size_code),
+        "L_in": size_code,
+    }
 
-    label=name_code+"_L"+str(size_code)+"_"+decoder
-    filename="results/"+label
+    label = name_code + "_L" + str(size_code) + "_" + decoder
+    filename = "results/" + label
 
-    input_data = get_input_data(label, parameters_code, error_model, decoder, min_error_rate, max_error_rate, n_error_rate, rounds, n_trials, filename)
-    effective_error_list, codespace_list, avg_walltime, full_filename = run_QEC_batch(input_data, rng)
-    
+    input_data = get_input_data(
+        label,
+        parameters_code,
+        error_model,
+        decoder,
+        min_error_rate,
+        max_error_rate,
+        n_error_rate,
+        rounds,
+        n_trials,
+        filename,
+    )
+    effective_error_list, codespace_list, avg_walltime, full_filename = run_QEC_batch(
+        input_data, rng
+    )
+
     input_data, result_Dict = load_from_pickle(full_filename)
 
-    code['decoding_results'] = result_Dict
+    code["decoding_results"] = result_Dict
 
     return code
 
+
 def perform_decoding_parallel(original_subfolder_name, code_configs):
     result_subfolder = os.path.join(
-        'intermediate_results_decoding',
+        "intermediate_results_decoding",
         original_subfolder_name,
     )
 
@@ -381,9 +413,7 @@ def perform_decoding_parallel(original_subfolder_name, code_configs):
     chunked_list = split_list(code_configs, num_chunks)  # Split the list into chunks
 
     start_time = time.time()
-    logging.warning(
-        "------------------ START DECODING ------------------"
-    )
+    logging.warning("------------------ START DECODING ------------------")
     logging.warning(f"Number of processes: {num_processes}")
     logging.warning(f"Number of code configurations: {len(code_configs)}")
 
@@ -408,11 +438,14 @@ def perform_decoding_parallel(original_subfolder_name, code_configs):
         )
         return
 
+
 def main(code_configs_dir):
     for root, dirs, files in os.walk(code_configs_dir):
         original_subfolder_name = os.path.basename(root)
         for file in files:
-            if file.startswith('unified_codes_with_distance') and file.endswith('.pickle'):
+            if file.startswith("unified_codes_with_distance") and file.endswith(
+                ".pickle"
+            ):
                 file_path = os.path.join(root, file)
                 code_configs = load_codes_from_pickle(file_path)
                 try:
@@ -423,5 +456,5 @@ def main(code_configs_dir):
 
 
 if __name__ == "__main__":
-    code_configs_dir = 'intermediate_results_code_distance_during_ongoing_code_search'
+    code_configs_dir = "intermediate_results_code_distance_during_ongoing_code_search"
     main(code_configs_dir)
