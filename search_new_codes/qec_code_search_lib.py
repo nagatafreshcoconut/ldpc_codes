@@ -141,6 +141,11 @@ def calculate_total_iterations(
                             total_iterations += 1
     return total_iterations
 
+def canonical_form(poly_sum):
+    # Split the polynomial sum into terms, sort them, and join back into a string
+    terms = poly_sum.split(" + ")
+    terms.sort()
+    return " + ".join(terms)
 
 def build_code(
     l: int,
@@ -148,12 +153,13 @@ def build_code(
     x: Dict[int, np.ndarray],
     y: Dict[int, np.ndarray],
     z: Dict[int, np.ndarray],
-    summand_combo_A: List[str],
-    summand_combo_B: List[str],
-    powers_A: List[int],
-    powers_B: List[int],
+    summand_combo_A: tuple[str, ...],
+    summand_combo_B: tuple[str, ...],
+    powers_A: tuple[int],
+    powers_B: tuple[int],
     encoding_rate_threshold: Optional[float],
     code_configs: List[Dict],
+    existing_codes: set,
 ):
     A, B = np.zeros((l * m, l * m), dtype=int), np.zeros((l * m, l * m), dtype=int)
     A_poly_sum, B_poly_sum = "", ""
@@ -187,6 +193,16 @@ def build_code(
     A_poly_sum = A_poly_sum.rstrip(" + ")
     B_poly_sum = B_poly_sum.rstrip(" + ")
 
+    # Ensure saving identical codes only once: Check the polynomials of A and B (x1 + z2) is the same as (z2 + x1)
+    # Create canonical forms for A_poly_sum and B_poly_sum
+    A_poly_canonical = canonical_form(A_poly_sum)
+    B_poly_canonical = canonical_form(B_poly_sum)
+    # Combine the canonical forms to create a unique key for this configuration
+    code_key = f"A: {A_poly_canonical}, B: {B_poly_canonical}"
+    if code_key in existing_codes:
+        # Skip saving this configuration as it's a duplicate
+        return
+
     # Transpose matrices A and B
     AT = np.transpose(A)
     BT = np.transpose(B)
@@ -206,7 +222,7 @@ def build_code(
         if qcode.K == 0:  # If the code has no logical qubits, skip it
             return
         sys.stdout = original_stdout  # Reset stdout to original value to enable logging
-        r = get_net_encoding_rate(qcode.K, qcode.N)  # Define get_net_encoding_rate
+        r = get_net_encoding_rate(int(qcode.K), int(qcode.N))  # Define get_net_encoding_rate
         encoding_rate_threshold = (
             1 / 15 if encoding_rate_threshold is None else encoding_rate_threshold
         )
@@ -223,6 +239,7 @@ def build_code(
             "B_poly_sum": B_poly_sum,
         }
         code_configs.append(code_config)
+        existing_codes.add(code_key)
 
 
 def search_code_space(
@@ -268,6 +285,7 @@ def search_code_space(
 
             # Iterate over weights and distribute them across A and B
             for weight in weight_range:
+                existing_codes = set()
                 for weight_A in range(
                     1, weight
                 ):  # Ensure at least one term in A and B # TODO: Could think of also raising to the power of zero leading to identity matrix
@@ -302,6 +320,7 @@ def search_code_space(
                                         powers_B,
                                         encoding_rate_threshold,
                                         code_configs,
+                                        existing_codes,
                                     )
                                     temp_batch_size = len(pickle.dumps(code_configs))
 

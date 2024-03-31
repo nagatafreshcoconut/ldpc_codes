@@ -4,3 +4,8 @@ intermediate_results_code_search
 intermediate_results_code_distance_during_ongoing_code_search
 search_codes_worker_script*.py
 .DS_Store
+venv
+*.png
+*.jpg
+*.jpeg
+.DS_Store

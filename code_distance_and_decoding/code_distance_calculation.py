@@ -89,9 +89,9 @@ def load_and_unify_intermediate_results(subfolder="intermediate_results_code_sea
         os.remove(file_path)
 
 
-def calculate_code_distance(code_config: Dict) -> int:
+def calculate_code_distance(code_config: Dict) -> Dict:
     """
-    Calculates and returns the code distance for a given code configuration
+    Calculates the code distance for a QEC code and and adds it to the code dictionary
     """
 
     try:
@@ -99,7 +99,7 @@ def calculate_code_distance(code_config: Dict) -> int:
         # stab @ x = 0 mod 2
         # logicOp @ x = 1 mod 2
         # here stab is a binary matrix and logicOp is a binary vector
-        def distance_test(stab, logicOp, code_config):
+        def distance_test(stab, logicOp, code_config) -> int:
             # number of qubits
             n = stab.shape[1]
             # number of stabilizers
@@ -150,18 +150,23 @@ def calculate_code_distance(code_config: Dict) -> int:
                 code_config["distance"] = f"Non-optimal solution: {model.status}"
                 raise Exception("Non-optimal solution: {}".format(model.status))
 
-            opt_val = sum([x[i].x for i in range(n)])
+            opt_val = sum([x[i].x for i in range(n)]) # type: ignore
 
             return int(opt_val)
 
-        distance = code_config.get("num_phys_qubits")
-        hx = code_config.get("hx").toarray()
-        lx = code_config.get("lx").toarray()
-        for i in range(code_config.get("num_log_qubits")):
+        distance = code_config["num_phys_qubits"]
+        hx = code_config["hx"].toarray() if isinstance(code_config["hx"], np.ndarray) else code_config["hx"] # type: ignore
+        lx = code_config["lx"].toarray() if isinstance(code_config["lx"], np.ndarray) else code_config["lx"] # type: ignore
+        distance_list = []
+        for i in range(code_config["num_log_qubits"]):
             w = distance_test(hx, lx[i, :], code_config)
+            distance_list.append(w)
             distance = min(distance, w)
 
-        code_config["distance"] = distance
+        code_config["distance_summary"] = {
+            "distance": distance,
+            "distance_list": distance_list,
+        }
         return code_config
 
     except Exception as e:
@@ -170,7 +175,11 @@ def calculate_code_distance(code_config: Dict) -> int:
                 "An error happened in the distance calculation: {}".format(e)
             )
             # Indicate an error occurred
-            code_config["distance"] = "Error in code distance calculation: {e}"
+            code_config["distance_summary"] = {
+                "distance": f"Error in code distance calculation: {e}",
+                "distance_list": distance_list,
+            }
+                
         return code_config
 
 

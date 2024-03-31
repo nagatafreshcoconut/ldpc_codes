@@ -31,9 +31,9 @@ def process_data(data):
         d
         for d in data
         if isinstance(d.get("distance"), int)
-        and d.get("distance") > 0
+        and d.get("distance") > 1
         and isinstance(d.get("num_log_qubits"), int)
-        and d.get("num_log_qubits") > 0
+        and d.get("num_log_qubits") > 1
     ]
 
     # Sort the list by 'encoding_rate' in descending order
