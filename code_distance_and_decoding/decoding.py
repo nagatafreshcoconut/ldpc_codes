@@ -4,8 +4,9 @@ Created on Sun Feb 25 10:48:43 2024
 Run PanQEC for error correction
 Can take in arbitrary CSS codes
 
-@author: Tobias Haug @TII, tobias.haug@u.nus.edu
-@modified by: Lukas Voss @CQT, lukasvoss@partner.nus.edu.sg
+@authors: 
+   - Tobias Haug @TII, tobias.haug@u.nus.edu
+   - Lukas Voss @CQT, lukasvoss@partner.nus.edu.sg
 
 """
 
@@ -35,8 +36,17 @@ from panqec.config import CODES, ERROR_MODELS, DECODERS
 CODES['CSSCode'] = CSSCode
 DECODERS['Z3Decoder'] = Z3Decoder
 
-import logging
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(parent_dir)
 
+# Import the get_net_encoding_rate function from the helper_functions.py file
+from helper_functions import (
+    load_from_pickle,
+    save_as_pickle,
+    rebuild_hz_from_hx,
+)
+
+import logging
 logging.basicConfig(
     level=logging.WARNING,
     format="%(asctime)s INFO %(message)s",
@@ -90,7 +100,7 @@ def parse_decoder_dict(decoder_dict, code, error_model, error_rate):
 
 def run_QEC_once(code, decoder, error_model, error_rate, rng, rounds):
     total_error = 0
-    for k in range(rounds):  ##rounds of error correction
+    for _ in range(rounds):  ##rounds of error correction
         error = error_model.generate(code, error_rate=error_rate, rng=rng)
         error = error + total_error  ##add uncorrected errors from previous rounds
         syndrome = code.measure_syndrome(error)
@@ -142,7 +152,7 @@ def run_QEC_batch(input_data, rng):
 
     for rep in range(n_trials):
         if n_trials >= 10 and rep % (n_trials // 10) == 0:
-            print(((rep + 1) // (n_trials // 10)) * 10, "% done")
+            logging.warning('{} % done'.format((rep // (n_trials // 10)) * 10))
 
         for k in range(n_error_params):
             start_time = datetime.datetime.now()
@@ -159,6 +169,8 @@ def run_QEC_batch(input_data, rng):
     avg_walltime = [np.mean(walltime_list[k]) for k in range(n_error_params)]
     total_time = datetime.datetime.now() - current_date
 
+    effective_error_list = [csr_matrix(effective_error_list[i]) for i in range(effective_error_list.shape[0])]
+
     resultDict = {
         "effective_error_list": effective_error_list,
         "codespace_list": codespace_list,
@@ -170,36 +182,12 @@ def run_QEC_batch(input_data, rng):
         "total_time": total_time,
     }
 
-    full_filename = filename + "_" + timestr + ".pcl"
+    full_filename = filename + "_" + timestr + ".pickle"
     fullDict = [input_data, resultDict]
-    outfile = open(full_filename, "wb")
-    pickle.dump(fullDict, outfile)
-    outfile.close()
+    save_as_pickle(full_filename, fullDict)
+    logging.warning('Saved decoding results to: {}'.format(full_filename))
 
     return (effective_error_list, codespace_list, avg_walltime, full_filename)
-
-
-def rebuild_hz_from_hx(hx):
-    # Number of columns in hx represents the total 'n'
-    # and rows in hx are 'n/2', so we split hx vertically in the middle.
-    n_cols = hx.shape[1]
-    half_n_cols = n_cols // 2
-
-    # Split Hx back into A and B based on its shape (n/2) x n.
-    A = hx[:, :half_n_cols]
-    B = hx[:, half_n_cols:]
-
-    # Transpose A and B to get AT and BT.
-    # Note: In this scenario, transposing doesn't change the shape from (n/2) x (n/2) to any other shape
-    # because A and B are not square matrices, but the step is kept for consistency with H_z construction logic.
-    AT, BT = A.T, B.T
-
-    # Construct Hz by horizontally stacking BT and AT.
-    # Since A and B are (n/2) x (n/2), their transposes are also (n/2) x (n/2), making Hz (n/2) x n.
-    hz = np.hstack((BT, AT))
-
-    return csr_matrix(hz)
-
 
 def save_results_as_pickle(code_configs_decoded, result_subfolder):
     if not os.path.exists(result_subfolder):
@@ -207,27 +195,23 @@ def save_results_as_pickle(code_configs_decoded, result_subfolder):
     file_path = os.path.join(result_subfolder, "codes_decoded.pickle")
     with open(file_path, "wb") as f:
         pickle.dump(code_configs_decoded, f)
+    logging.warning('Saved decoding results to: {}'.format(file_path))
 
 
-def load_codes_from_pickle(file_path):
-    with open(file_path, "rb") as f:
-        grouped_codes = pickle.load(f)
+def load_codes_from_pickle(file_path: str):
+    
+    grouped_codes = load_from_pickle(file_path)
 
     # Add stabilizer check Hz to the code configs
-    for weight, properties in grouped_codes.items():
-        for property_name, codes in properties.items():
-            for code in codes:
-                # Assuming 'hx' is stored directly in each code dictionary
-                # and that 'hx' is already an np.array or similar that supports slicing
+    for weight, codes in grouped_codes.items():
+        # for property_name, codes in properties.items():
+        for code in codes:
+            # Assuming 'hx' is stored directly in each code dictionary
+            # and that 'hx' is already an np.array or similar that supports slicing
+            if 'hz' not in code:
                 hx = code['hx'].toarray() if not isinstance(code['hx'], np.ndarray) else code['hx'] # Convert to np.array if saved as sparse matrix
                 code['hz'] = rebuild_hz_from_hx(hx)
     return grouped_codes
-
-
-def load_from_pickle(file_path):
-    with open(file_path, "rb") as f:
-        data = pickle.load(f)
-    return data
 
 
 def plot_results(effective_error, error_rate):
@@ -279,16 +263,14 @@ def get_input_data(
             "name": decoder,
             "parameters": parameters_decoder,
         },
-        "error_rate": np.linspace(
-            min_error_rate, max_error_rate, n_error_rate
-        ).tolist(),  # List of physical error rates
+        "error_rate": np.logspace(np.log10(min_error_rate), np.log10(max_error_rate), n_error_rate).tolist(),  # List of physical error rates
         "rounds": rounds,  ##number of rounds of error correction (on same instance)
         "n_trials": n_trials,  ##number of repetitions of QEC to get statistics
         "filename": filename,  ##name to save
     }
 
 def perform_decoding(args):
-    code, weight, property_name, index = args
+    code, weight, index = args
     rng = np.random.default_rng()
 
     name_code, decoder, error_model, size_code = get_code_details()
@@ -300,10 +282,10 @@ def perform_decoding(args):
         n_error_rate,
     ) = get_decoding_details()
 
-    Hx = code["hx"].toarray() if not isinstance(code["hx"], np.ndarray) else code["hx"]
-    Hz = code["hz"].toarray() if not isinstance(code["hz"], np.ndarray) else code["hz"]
+    Hx = code["hx"].toarray() if isinstance(code["hx"], csr_matrix) else code["hx"]
+    Hz = code["hz"].toarray() if isinstance(code["hz"], csr_matrix) else code["hz"]
 
-    parameters_decoder={}
+    parameters_decoder = {}
     if decoder == "BeliefPropagationOSDDecoder":
         n_qubits = np.shape(Hx)[1]
         osd_order_limit = min(n_qubits-np.linalg.matrix_rank(Hx), n_qubits-np.linalg.matrix_rank(Hz))
@@ -338,79 +320,96 @@ def perform_decoding(args):
     )
 
     input_data, result_Dict = load_from_pickle(full_filename)
+    logging.warning('Loaded result dict')
 
-    # Only keep the relevant results
-    # code["decoding_results"] = {
-    #     "effective_error_list": result_Dict["effective_error_list"],
-    #     "error_rate": result_Dict["error_rate"],
-    # }
+    logging.warning('result_Dict has attr error_rate: {}'.format(hasattr(result_Dict, "error_rate")))
+
+    logging.warning('Type of effective_error_list: {}'.format(type(result_Dict["effective_error_list"])))
+
+    logging.warning('Shape of effective_error_list: {}'.format(result_Dict["effective_error_list"].shape))
+    logging.warning('Shape of error_rate: {}'.format(result_Dict["error_rate"].shape))
 
     return {
-        "effective_error_list": csr_matrix(result_Dict["effective_error_list"]),
+        "effective_error_list": result_Dict["effective_error_list"],
         "error_rate": result_Dict["error_rate"],
     }
-
 
 def perform_decoding_parallel(original_subfolder_name, grouped_code_configs):
     result_subfolder = os.path.join(
         "intermediate_results_decoding",
         original_subfolder_name,
     )
+    logging.warning('Result Subfolder: {}'.format(result_subfolder))
 
-    # TODO: Use knowledge about structure of the saved dicts
     num_processes = multiprocessing.cpu_count()
 
     start_time = time.time()
     logging.warning("------------------ START DECODING ------------------")
     logging.warning(f"Number of processes: {num_processes}")
-    logging.warning(f"Number of code configurations: {len(grouped_code_configs)}")
+    logging.warning(f"Number of different code weights: {len(grouped_code_configs)}")
 
     args_list = []
-    for weight, properties in grouped_code_configs.items():
-        for property_name, codes in properties.items():
-            for index, code in enumerate(codes):
-                args_list.append((code, weight, property_name, index))
-
+    for weight, codes in grouped_code_configs.items():
+        for index, code in enumerate(codes):
+            args_list.append((code, weight, index))
 
     # Decode codes in parallel and collect results
-    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-        decoding_results = pool.map(perform_decoding, args_list)
+    with multiprocessing.Pool(processes=num_processes) as pool:
+        decoding_results = pool.map(perform_decoding, args_list)      
 
-    # Integrate decoding results back into the original structure
-    for decoding_result in decoding_results:
-        grouped_code_configs[weight][property_name][index]['decoding_results'] = decoding_result
+    logging.warning('Finished decoding all code configurations')
 
+    for ind, result in enumerate(decoding_results):
+        # Use the same index to access the corresponding task information in args_list
+        _, weight, index = args_list[ind]  # Correctly unpack the task information
+        
+        # Assign the decoding result to the correct location
+        grouped_code_configs[weight][index]['decoding_results'] = result
+    
     save_results_as_pickle(grouped_code_configs, result_subfolder)
-    logging.warning('Saved decoding results to: {}'.format(result_subfolder))
     logging.warning("------------------ END DECODING ------------------")
     logging.warning(f"Decoding took {round(time.time() - start_time, 0)} seconds")
 
 
 def main(code_configs_dir):
-    for root, dirs, files in os.walk(code_configs_dir):
-        # Check if 'codes_with_highest_properties_to_be_decoded' is in the current root's subdirectories
-        if 'codes_with_highest_properties_to_be_decoded' in dirs:
-            target_dir = os.path.join(root, 'codes_with_highest_properties_to_be_decoded')
-            # Process each pickle file within the target directory
-            for filename in os.listdir(target_dir):
-                if filename.endswith(".pickle"):
+    # Ensure the function `load_codes_from_pickle` and `perform_decoding_parallel` are defined.
+    
+    for root, dirs, files in os.walk(code_configs_dir, topdown=True):
+        for dir_name in dirs:
+            # Check if 'beating_surface_code' is one of the subdirectories in the current directory
+            if dir_name == 'beating_surface_code':
+                target_dir = os.path.join(root, dir_name)
+                logging.warning('Target directory: {}'.format(target_dir))
+                
+                # Process each pickle file within the target directory
+                for filename in os.listdir(target_dir):
+                    if filename.endswith(".pickle"):
+                        file_path = os.path.join(target_dir, filename)
+                        logging.warning('Decoding this file:', file_path)
+                        
+                        try:
+                            # Assuming `load_codes_from_pickle` loads pickle files and returns their content
+                            grouped_code_configs = load_codes_from_pickle(file_path)
                             
-                    file_path = os.path.join(target_dir, filename)
-                    print('Decoding this file:', file_path)
-                    
-                    try:
-                        grouped_code_configs = load_codes_from_pickle(file_path)
-                        # grouped_code_configs = grouped_code_configs[:10]  # For testing purposes
-                        original_subfolder_name = os.path.basename(os.path.dirname(target_dir))
-                        perform_decoding_parallel(original_subfolder_name, grouped_code_configs)
-                    except Exception as e:
-                        logging.error(f"Error for {file_path}: {e}")
-                        raise
-                        continue
+                            for weight, codes in grouped_code_configs.items():
+                                logging.warning(f"Reducing the number of codes for {weight} to 5")
+                                grouped_code_configs[weight] = codes[:2]
+
+                            # Assuming the directory name immediately before 'beating_surface_code' is required
+                            original_subfolder_name = os.path.basename(root)
+                            
+                            # Assuming `perform_decoding_parallel` is your decoding function
+                            perform_decoding_parallel(original_subfolder_name, grouped_code_configs)
+                            
+                        except Exception as e:
+                            logging.error(f"Error for {file_path}: {e}")
+                            # Removed 'raise' to continue processing other files even if an error occurs
+                            continue
+
 
 def get_code_details():
     name_code = "Toric"
-    decoder = "BeliefPropagationOSDDecoder"
+    decoder = "BeliefPropagationOSDDecoder" # "Z3Decoder"
     error_model = "PauliErrorModel"
     size_code = 6
     return name_code, decoder, error_model, size_code
@@ -420,13 +419,13 @@ def get_decoding_details():
     n_trials = int(1e3)  # repetititons to get statistics
     rounds = 1  # rounds of Error correction applied
 
-    min_error_rate = 5*1e-3
-    max_error_rate = 1e-1
+    min_error_rate = 1e-3 # 1e-4
+    max_error_rate = 25e-2 # 5e-2
 
     n_error_rate = 20
 
     return n_trials, rounds, min_error_rate, max_error_rate, n_error_rate
 
 if __name__ == "__main__":
-    code_configs_dir = "intermediate_results_code_distance_during_ongoing_code_search"
+    code_configs_dir = '/Users/lukasvoss/Documents/Persönliche Unterlagen/Singapur 2023-2024/03_AStar_KishorBharti/02_Research/ldpc_codes/intermediate_results_code_distance_during_ongoing_code_search' # "intermediate_results_code_distance_during_ongoing_code_search"
     main(code_configs_dir)
