@@ -13,6 +13,7 @@ import pickle
 from itertools import product
 from scipy.sparse import csr_matrix
 import matplotlib.pyplot as plt
+
 plt.style.use("ggplot")
 
 
@@ -27,8 +28,9 @@ logging.basicConfig(
 
 ### General data processing functions
 
+
 def load_from_pickle(file_path: str):
-    """ Load data from a pickle file. """
+    """Load data from a pickle file."""
     try:
         with open(file_path, "rb") as file:
             data = pickle.load(file)
@@ -37,24 +39,15 @@ def load_from_pickle(file_path: str):
         logging.warning("Error Message: {}".format(e))
     return data
 
+
 def save_as_pickle(file_path: str, data) -> None:
-    """ Save data as a pickle file. """
+    """Save data as a pickle file."""
     dir = os.path.dirname(file_path)
     if not os.path.exists(dir):
         os.makedirs(dir)
     with open(file_path, "wb") as file:
         pickle.dump(data, file)
 
-def extract_file_and_parent_directory(full_path: str) -> str:
-    # Get the file name
-    file_name = os.path.basename(full_path)
-    # Get the full directory path
-    directory_path = os.path.dirname(full_path)
-    # Get the parent directory name
-    parent_directory = os.path.basename(directory_path)
-    # Combine the parent directory and file name
-    result = os.path.join(parent_directory, file_name)
-    return result
 
 def extract_file_and_parent_directory(full_path: str) -> str:
     # Get the file name
@@ -66,14 +59,29 @@ def extract_file_and_parent_directory(full_path: str) -> str:
     # Combine the parent directory and file name
     result = os.path.join(parent_directory, file_name)
     return result
+
+
+def extract_file_and_parent_directory(full_path: str) -> str:
+    # Get the file name
+    file_name = os.path.basename(full_path)
+    # Get the full directory path
+    directory_path = os.path.dirname(full_path)
+    # Get the parent directory name
+    parent_directory = os.path.basename(directory_path)
+    # Combine the parent directory and file name
+    result = os.path.join(parent_directory, file_name)
+    return result
+
 
 ### Below functions belong to searching new codes
+
 
 def get_net_encoding_rate(
     k: int,
     n: int,
 ) -> float:
     return k / (2.0 * n)
+
 
 def get_valid_powers_for_summands(summand_combo, l, m, range_A, range_B) -> product:
     """
@@ -104,6 +112,7 @@ def get_valid_powers_for_summands(summand_combo, l, m, range_A, range_B) -> prod
     # Use product to generate all valid combinations within the specified ranges
     return product(*ranges_for_combo)
 
+
 def calculate_total_iterations(
     l_range, m_range, weight_range, power_range_A, power_range_B
 ) -> int:
@@ -124,13 +133,17 @@ def calculate_total_iterations(
                             total_iterations += 1
     return total_iterations
 
+
 def canonical_form(poly_sum) -> str:
     # Split the polynomial sum into terms, sort them, and join back into a string
     terms = poly_sum.split(" + ")
     terms.sort()
     return " + ".join(terms)
 
-def build_x_y_z_matrices(l: int, m: int) -> Tuple[Dict[int, np.ndarray], Dict[int, np.ndarray], Dict[int, np.ndarray]]:
+
+def build_x_y_z_matrices(
+    l: int, m: int
+) -> Tuple[Dict[int, np.ndarray], Dict[int, np.ndarray], Dict[int, np.ndarray]]:
     """
     Builds the matrices x, y, and z based on the given dimensions.
 
@@ -139,7 +152,7 @@ def build_x_y_z_matrices(l: int, m: int) -> Tuple[Dict[int, np.ndarray], Dict[in
     m (int): The number of columns in the identity matrix I_m.
 
     Returns:
-    Tuple[Dict[int, np.ndarray], Dict[int, np.ndarray], Dict[int, np.ndarray]]: 
+    Tuple[Dict[int, np.ndarray], Dict[int, np.ndarray], Dict[int, np.ndarray]]:
     A tuple containing three dictionaries:
         - x: A dictionary of matrices x[i] for i in range(l).
         - y: A dictionary of matrices y[j] for j in range(m).
@@ -162,7 +175,10 @@ def build_x_y_z_matrices(l: int, m: int) -> Tuple[Dict[int, np.ndarray], Dict[in
 
     return x, y, z
 
-def construct_matrix_and_poly_sum(l, m, summand_combo, powers, x: dict, y: dict, z: dict):
+
+def construct_matrix_and_poly_sum(
+    l, m, summand_combo, powers, x: dict, y: dict, z: dict
+):
     """
     Constructs a matrix sum and a polynomial sum based on the given summand combination, powers, and matrices.
 
@@ -189,6 +205,7 @@ def construct_matrix_and_poly_sum(l, m, summand_combo, powers, x: dict, y: dict,
         poly_sum_str += f"{summand}{power} + "
     return matrix_sum, poly_sum_str
 
+
 def get_code_weight(A_poly_sum: str, B_poly_sum: str) -> int:
     """
     Calculate the weight of a code.
@@ -199,12 +216,14 @@ def get_code_weight(A_poly_sum: str, B_poly_sum: str) -> int:
         int: The weight of the code.
     """
     # Split the sum_expression by '+' and strip whitespace from each summand
-    weigth_A = [summand.strip() for summand in A_poly_sum.split('+')]
-    weigth_B = [summand.strip() for summand in B_poly_sum.split('+')]
+    weigth_A = [summand.strip() for summand in A_poly_sum.split("+")]
+    weigth_B = [summand.strip() for summand in B_poly_sum.split("+")]
     return sum([len(weigth_A), len(weigth_B)])
+
 
 def get_all_combinations(elements: List[str], repetitions: int) -> list:
     return list(product(elements, repeat=repetitions))
+
 
 def make_code_dim_numerical(code_dim: Union[int, str]) -> int:
     if isinstance(code_dim, str):
@@ -215,11 +234,13 @@ def make_code_dim_numerical(code_dim: Union[int, str]) -> int:
     elif isinstance(code_dim, Union[int, float]):
         return int(code_dim)
     else:
-        raise ValueError("Invalid code dimension. Must be 'qubit', 'qutrit', or an integer 2 or 3.")
-
+        raise ValueError(
+            "Invalid code dimension. Must be 'qubit', 'qutrit', or an integer 2 or 3."
+        )
 
 
 ### Below functions are used for the code distance calculation
+
 
 def split_list(lst: List, num_chunks: int = 500):
     """
@@ -238,14 +259,18 @@ def split_list(lst: List, num_chunks: int = 500):
     ]
 
 
-
 ### Below functions are used after the distance has been calculated and we prepare codes for the decoding
+
 
 def sort_list_dicts(list_data: List[Dict], key) -> List[Dict]:
     return sorted(list_data, key=lambda x: x.get(key, 0), reverse=True)
 
-def check_beaten_surface_code_characteristics(distance: int, num_phys_qubits: int) -> bool:
+
+def check_beaten_surface_code_characteristics(
+    distance: int, num_phys_qubits: int
+) -> bool:
     return (2 * distance**2) > num_phys_qubits
+
 
 def best_code_conditions(d: dict) -> bool:
     """Checks if a QEC code has better characteristics than the surface code."""
@@ -262,15 +287,18 @@ def best_code_conditions(d: dict) -> bool:
     num_phys_qubits = d.get("num_phys_qubits")
 
     return (
-        isinstance(distance, int) and distance >= 3 and
-        isinstance(num_log_qubits, int) and num_log_qubits >= 2 and
-        check_beaten_surface_code_characteristics(distance, num_phys_qubits)
+        isinstance(distance, int)
+        and distance >= 3
+        and isinstance(num_log_qubits, int)
+        and num_log_qubits >= 2
+        and check_beaten_surface_code_characteristics(distance, num_phys_qubits)
     )
-    
+
+
 def group_codes_by_weight(codes: List[Dict]) -> Dict[int, List[Dict]]:
     """
     Groups codes by their weight.
-    
+
     Parameters:
     - codes (List[Dict]): A list of code dictionaries.
 
@@ -279,12 +307,13 @@ def group_codes_by_weight(codes: List[Dict]) -> Dict[int, List[Dict]]:
     """
     grouped_by_weight = {}
     for code in codes:
-        if not hasattr(code, 'weight'):
-            code['weight'] = get_code_weight(code['A_poly_sum'], code['B_poly_sum'])
-        weight = code['weight']
+        if not hasattr(code, "weight"):
+            code["weight"] = get_code_weight(code["A_poly_sum"], code["B_poly_sum"])
+        weight = code["weight"]
         grouped_by_weight.setdefault(weight, []).append(code)
-    
+
     return grouped_by_weight
+
 
 def filter_best_codes_group_by_weight(data: List[Dict]) -> List[Dict]:
     """
@@ -300,13 +329,12 @@ def filter_best_codes_group_by_weight(data: List[Dict]) -> List[Dict]:
 
     best_codes = [d for d in data if best_code_conditions(d)]
     best_codes = sort_list_dicts(best_codes, "encoding_rate")
-    print('best codes beating the surface code:', len(best_codes))
+    print("best codes beating the surface code:", len(best_codes))
 
     other_codes = [d for d in data if not best_code_conditions(d)]
     other_codes = sort_list_dicts(other_codes, "encoding_rate")
-    print('All remaining codes NOT beating surface code:', len(other_codes))
+    print("All remaining codes NOT beating surface code:", len(other_codes))
 
-        
     # Remaining codes that do not meet the criteria
     if len(best_codes) == 0:
         logging.warning("No codes beat the surface code.")
@@ -319,6 +347,7 @@ def filter_best_codes_group_by_weight(data: List[Dict]) -> List[Dict]:
 
 
 ### Below functions are used for the decoding
+
 
 def rebuild_hz_from_hx(hx: np.ndarray) -> csr_matrix:
     # Number of columns in hx represents the total 'n'
@@ -341,16 +370,22 @@ def rebuild_hz_from_hx(hx: np.ndarray) -> csr_matrix:
 
     return csr_matrix(hz)
 
+
 def add_hz_to_code(grouped_codes: Dict[int, List[Dict]]):
-        # Add stabilizer check Hz to the code configs if not already present
-        for _, codes in grouped_codes.items():
-            #for property_name, codes in properties.items():
-            for code in codes:
-                # Assuming 'hx' is stored directly in each code dictionary
-                # and that 'hx' is already an np.array or similar that supports slicing
-                hx = code['hx'].toarray() if isinstance(code['hx'], csr_matrix) else code['hx'] # Convert to np.array if saved as sparse matrix
-                code['hz'] = rebuild_hz_from_hx(hx)
-        return grouped_codes
+    # Add stabilizer check Hz to the code configs if not already present
+    for _, codes in grouped_codes.items():
+        # for property_name, codes in properties.items():
+        for code in codes:
+            # Assuming 'hx' is stored directly in each code dictionary
+            # and that 'hx' is already an np.array or similar that supports slicing
+            hx = (
+                code["hx"].toarray()
+                if isinstance(code["hx"], csr_matrix)
+                else code["hx"]
+            )  # Convert to np.array if saved as sparse matrix
+            code["hz"] = rebuild_hz_from_hx(hx)
+    return grouped_codes
+
 
 def plot_results(effective_error, error_rate):
     effective_error_all = np.any(
@@ -368,6 +403,7 @@ def plot_results(effective_error, error_rate):
     ax.set_xlabel("physical error rate")
     ax.set_ylabel("logical error rate")
     plt.show()
+
 
 def get_decoder_marker(decoder_name: str) -> str:
     decoder_markers = {

@@ -48,7 +48,12 @@ class CodeDistanceCalculator:
         known_files (set): Set to keep track of files already processed.
     """
 
-    def __init__(self, found_codes_dir: str, exclude_dirs: Optional[List[str]] = None, decoded_codes_dir: str = "intermediate_results_code_distance_during_ongoing_code_search"):
+    def __init__(
+        self,
+        found_codes_dir: str,
+        exclude_dirs: Optional[List[str]] = None,
+        decoded_codes_dir: str = "intermediate_results_code_distance_during_ongoing_code_search",
+    ):
         """
         Initializes the CodeDistanceCalculator with specified directories and exclusion settings.
 
@@ -75,7 +80,9 @@ class CodeDistanceCalculator:
             self.exclude_dirs = set()
         new_files = []
         for root, dirs, files in os.walk(self.found_code_configs_dir):
-            dirs[:] = [d for d in dirs if d not in self.exclude_dirs]  # Modify dirs in-place to exclude certain directories
+            dirs[:] = [
+                d for d in dirs if d not in self.exclude_dirs
+            ]  # Modify dirs in-place to exclude certain directories
             for file_name in files:
                 file_path = os.path.join(root, file_name)
                 if os.path.isfile(file_path) and file_name not in self.known_files:
@@ -116,7 +123,6 @@ class CodeDistanceCalculator:
             # Wait for 30 minutes before next check
             time.sleep(1800)
 
-
     def load_and_unify_intermediate_results(self, subfolder: str) -> None:
         """
         Loads intermediate results from the specified subfolder, unifies them into a single file,
@@ -125,16 +131,23 @@ class CodeDistanceCalculator:
         Parameters:
             subfolder (str): The directory containing the intermediate result files to unify.
         """
-        unified_configs, files_to_delete = [], [] # List to keep track of files to delete after unification
+        unified_configs, files_to_delete = (
+            [],
+            [],
+        )  # List to keep track of files to delete after unification
 
         # Count existing unified pickle files to determine the index for the new file
         existing_unified_files = [
-            f for f in os.listdir(subfolder) if f.startswith("unified_codes_with_distance_")
+            f
+            for f in os.listdir(subfolder)
+            if f.startswith("unified_codes_with_distance_")
         ]
         next_file_index = len(existing_unified_files) + 1
 
         for filename in os.listdir(subfolder):
-            if filename.startswith("codes_with_distance") and filename.endswith(".pickle"):
+            if filename.startswith("codes_with_distance") and filename.endswith(
+                ".pickle"
+            ):
                 file_path = os.path.join(subfolder, filename)
                 # Add this file to the list of files to delete
                 files_to_delete.append(file_path)
@@ -153,7 +166,6 @@ class CodeDistanceCalculator:
         # Delete the intermediate files
         for file_path in files_to_delete:
             os.remove(file_path)
-
 
     def calculate_code_distance(self, code_config: Dict) -> Dict:
         """
@@ -222,23 +234,31 @@ class CodeDistanceCalculator:
                     code_config["distance"] = f"Non-optimal solution: {model.status}"
                     raise Exception("Non-optimal solution: {}".format(model.status))
 
-                opt_val = sum([x[i].x for i in range(n)]) # type: ignore
+                opt_val = sum([x[i].x for i in range(n)])  # type: ignore
 
                 return int(opt_val)
 
             distance_list = []
-            hx = code_config["hx"].toarray() if isinstance(code_config["hx"], csr_matrix) else code_config["hx"]
-            lx = code_config["lx"].toarray() if isinstance(code_config["lx"], csr_matrix) else code_config["lx"]
-            
+            hx = (
+                code_config["hx"].toarray()
+                if isinstance(code_config["hx"], csr_matrix)
+                else code_config["hx"]
+            )
+            lx = (
+                code_config["lx"].toarray()
+                if isinstance(code_config["lx"], csr_matrix)
+                else code_config["lx"]
+            )
+
             for i in range(code_config["num_log_qubits"]):
                 ## add stabilizer to logical. This seems to fix some issues with distance test
                 ## in paritcular, infeasability error and wrong distances seems to be fixed with this
                 ## it seems the code works better if the logical has higher weight than stabilizer
                 ## or more slack ancillas for logical are added. This has no impact on problem, yet seems to fix it
                 ## note that one can always add stabilizer to logical
-                w = distance_test(hx, lx[i, :]+hx[0, :], code_config)
+                w = distance_test(hx, lx[i, :] + hx[0, :], code_config)
                 distance_list.append(w)
-            code_distance = min(distance_list)            
+            code_distance = min(distance_list)
 
             code_config["distance_summary"] = {
                 "distance": code_distance,
@@ -256,9 +276,8 @@ class CodeDistanceCalculator:
                     "distance": f"Error in code distance calculation: {e}",
                     "distance_list": distance_list,
                 }
-                    
-            return code_config
 
+            return code_config
 
     def get_code_distance_parallel(
         self, code_configs: List[Dict], original_subfolder_name: str
@@ -273,7 +292,7 @@ class CodeDistanceCalculator:
         """
         # The folder where results will be saved, named after the original subfolder
         result_subfolder = os.path.join(
-            self.decoded_codes_dir, 
+            self.decoded_codes_dir,
             original_subfolder_name,
         )
 
@@ -282,7 +301,9 @@ class CodeDistanceCalculator:
         num_chunks = len(code_configs) // 200
         if num_chunks < 1:
             num_chunks = 1
-        chunked_list = split_list(code_configs, num_chunks)  # Split the list into chunks
+        chunked_list = split_list(
+            code_configs, num_chunks
+        )  # Split the list into chunks
 
         start_time = time.time()
         logging.warning(
@@ -295,7 +316,9 @@ class CodeDistanceCalculator:
             logging.warning(f"Number of codes in Chunk {i+1}: {len(chunk)}")
 
             with multiprocessing.Pool(processes=num_processes) as pool:
-                code_configs_with_distance = pool.map(self.calculate_code_distance, chunk)
+                code_configs_with_distance = pool.map(
+                    self.calculate_code_distance, chunk
+                )
 
             # Save intermediate results in the new subfolder
             file_path = os.path.join(

@@ -46,13 +46,17 @@ logging.basicConfig(
 
 
 class SearchLDPCCodes:
-
-    def __init__(self, param_space: Dict, result_dir: str = "intermediate_results_code_search", encoding_rate_threshold: float = 1/15, max_size_mb_per_saved_file: int = 50):
+    def __init__(
+        self,
+        param_space: Dict,
+        result_dir: str = "intermediate_results_code_search",
+        encoding_rate_threshold: float = 1 / 15,
+        max_size_mb_per_saved_file: int = 50,
+    ):
         self.param_space = param_space
         self.result_dir = result_dir
         self.encoding_rate_threshold = encoding_rate_threshold
         self.max_size_mb = max_size_mb_per_saved_file
-
 
     def save_intermediate_results(
         self,
@@ -71,7 +75,6 @@ class SearchLDPCCodes:
         )
         save_as_pickle(file_path, code_configs)
 
-
     def load_and_unify_intermediate_results(self):
         unified_configs = []
 
@@ -86,7 +89,6 @@ class SearchLDPCCodes:
                     unified_configs.extend(configs)
 
         return unified_configs
-
 
     def create_slice_identifier(self, l_value, m_value, weight_value) -> str:
         """
@@ -119,24 +121,32 @@ class SearchLDPCCodes:
         weight_part = "".join(map(str, weight_value_sorted))
 
         # Combine all parts
-        slice_identifier = f"codedim{self._code_dimension}_l{l_part}_m{m_part}_weight{weight_part}"
+        slice_identifier = (
+            f"codedim{self._code_dimension}_l{l_part}_m{m_part}_weight{weight_part}"
+        )
         return slice_identifier
 
-    def get_check_matrices_and_code(self, A: np.ndarray, B: np.ndarray, AT: np.ndarray, BT: np.ndarray, code_dimension: Union[int, str] = 2):
-            
-        if code_dimension == 2 or code_dimension == 'qubit': # Qubit case
+    def get_check_matrices_and_code(
+        self,
+        A: np.ndarray,
+        B: np.ndarray,
+        AT: np.ndarray,
+        BT: np.ndarray,
+        code_dimension: Union[int, str] = 2,
+    ):
+        if code_dimension == 2 or code_dimension == "qubit":  # Qubit case
             hx = np.hstack((A, B))
             hz = np.hstack((BT, AT))
 
             qcode = css_code(hx, hz)
 
-        elif code_dimension == 3 or code_dimension == 'qutrit': # Qutrit case
+        elif code_dimension == 3 or code_dimension == "qutrit":  # Qutrit case
             GFp = galois.GF(int(3))
 
             # Construct matrices hx and hz
-            hx = np.hstack((A, (-B)%3))
+            hx = np.hstack((A, (-B) % 3))
             hz = np.hstack((BT, AT))
-            
+
             # Use custom class QutritCSSCode, make the matrices SageMath matrix, automatically changes all entries mod p
             qcode = QutritCSSCode(GFp(hx), GFp(hz))
 
@@ -147,7 +157,7 @@ class SearchLDPCCodes:
 
     def build_code(
         self,
-        code_dimension : Union[int, str],
+        code_dimension: Union[int, str],
         l: int,
         m: int,
         x: Dict[int, np.ndarray],
@@ -208,10 +218,14 @@ class SearchLDPCCodes:
         AT = np.transpose(A)
         BT = np.transpose(B)
 
-        if code_dimension == 2 or code_dimension == 'qubit':
-            hx, hz, qcode = self.get_check_matrices_and_code(A, B, AT, BT, code_dimension)
+        if code_dimension == 2 or code_dimension == "qubit":
+            hx, hz, qcode = self.get_check_matrices_and_code(
+                A, B, AT, BT, code_dimension
+            )
         else:
-            raise NotImplementedError('Currently only the qubit case, so code_dimension=2 is supported.')
+            raise NotImplementedError(
+                "Currently only the qubit case, so code_dimension=2 is supported."
+            )
 
         ### Surpress the print output of the css_code.test()
         # Redirect stdout to a dummy StringIO object
@@ -219,10 +233,14 @@ class SearchLDPCCodes:
 
         if qcode.test():  # Define the test method for qcode
             # If the code has no logical qubits or is trivial, skip it
-            if qcode.K == 0 or qcode.N == qcode.K:  
+            if qcode.K == 0 or qcode.N == qcode.K:
                 return
-            sys.stdout = original_stdout  # Reset stdout to original value to enable logging
-            r = get_net_encoding_rate(int(qcode.K), int(qcode.N))  # Define get_net_encoding_rate
+            sys.stdout = (
+                original_stdout  # Reset stdout to original value to enable logging
+            )
+            r = get_net_encoding_rate(
+                int(qcode.K), int(qcode.N)
+            )  # Define get_net_encoding_rate
             code_config = {
                 "code_dimension": code_dimension,
                 "l": l,
@@ -241,7 +259,6 @@ class SearchLDPCCodes:
             }
             code_configs.append(code_config)
             existing_codes.add(code_key)
-
 
     def search_code_space(
         self,
@@ -280,8 +297,12 @@ class SearchLDPCCodes:
                         weight_B = weight - weight_A
 
                         # Generate all combinations of summands in A and B with their respective weights
-                        summands_A = get_all_combinations(elements=["x", "y", "z"], repetitions=weight_A)
-                        summands_B = get_all_combinations(elements=["x", "y", "z"], repetitions=weight_B)
+                        summands_A = get_all_combinations(
+                            elements=["x", "y", "z"], repetitions=weight_A
+                        )
+                        summands_B = get_all_combinations(
+                            elements=["x", "y", "z"], repetitions=weight_B
+                        )
 
                         for summand_combo_A, summand_combo_B in product(
                             summands_A, summands_B
@@ -310,7 +331,9 @@ class SearchLDPCCodes:
                                             code_configs,
                                             existing_codes,
                                         )
-                                        temp_batch_size = len(pickle.dumps(code_configs))
+                                        temp_batch_size = len(
+                                            pickle.dumps(code_configs)
+                                        )
 
                                         if temp_batch_size > max_size_bytes:
                                             # Save the current batch and start a new one
@@ -345,8 +368,9 @@ class SearchLDPCCodes:
 
         # Save any remaining configurations after the loop
         if code_configs:
-            self.save_intermediate_results(code_configs, chunk_index + 1, self._slice_identifier)
-
+            self.save_intermediate_results(
+                code_configs, chunk_index + 1, self._slice_identifier
+            )
 
     def search_codes(self):
         start_time = time.time()
@@ -378,7 +402,9 @@ class SearchLDPCCodes:
         self._total_iterations = calculate_total_iterations(
             l_value, m_value, weight_value, power_range_A, power_range_B
         )
-        logging.warning("Total iterations: {} thousands".format(self._total_iterations / 1e3))
+        logging.warning(
+            "Total iterations: {} thousands".format(self._total_iterations / 1e3)
+        )
 
         # Search for good configurations (since interdependent cannot properly parallelized)
         self.search_code_space(
@@ -397,31 +423,31 @@ class SearchLDPCCodes:
     @property
     def code_dimension(self):
         return self.param_space["code_dimension"]
-    
+
     @property
     def l_value(self):
         return self.param_space["l_value"]
-    
+
     @property
     def m_value(self):
         return self.param_space["m_value"]
-    
+
     @property
     def weight_value(self):
         return self.param_space["weight_value"]
-    
+
     @property
     def power_range_A(self):
         return self.param_space["power_range_A"]
-    
+
     @property
     def power_range_B(self):
         return self.param_space["power_range_B"]
-    
+
     @property
     def slice_identifier(self):
         return self._slice_identifier
-    
+
     @property
     def total_iterations(self):
         return self._total_iterations
